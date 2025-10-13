@@ -1,5 +1,6 @@
 package com.hans.gesticar
 
+
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -10,7 +11,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.hans.gesticar.ui.Routes
-import com.hans.gesticar.ui.screens.HomeScreen
+import com.hans.gesticar.ui.screens.HomeMenuScreen
+import com.hans.gesticar.ui.screens.SearchOtScreen
 import com.hans.gesticar.ui.screens.LoginScreen
 import com.hans.gesticar.viewmodel.MainViewModel
 
@@ -28,13 +30,16 @@ class MainActivity : ComponentActivity() {
                             LoginScreen(
                                 onLogin = { email, pass ->
                                     vm.loginAdmin(email, pass)
-                                    if (vm.ui.value.adminLoggedIn) nav.navigate(Routes.HOME) { popUpTo(Routes.LOGIN) { inclusive = true } }
+                                    if (vm.ui.value.adminLoggedIn) {
+                                        nav.navigate(Routes.HOME) {
+                                            popUpTo(Routes.LOGIN) { inclusive = true }
+                                        }
+                                    }
                                 }
                             )
                         }
-                        composable(Routes.HOME) {
-                            HomeScreen(vm = vm)
-                        }
+                        composable(Routes.HOME) { HomeMenuScreen(vm = vm, nav = nav) }
+                        composable(Routes.SEARCH_OT) { SearchOtScreen(vm = vm) }
                     }
                 }
             }

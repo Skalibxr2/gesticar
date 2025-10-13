@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 data class UiState(
     val adminLoggedIn: Boolean = false,
     val usuarioAdmin: String? = null,
+    val displayName: String? = null,
     val ots: List<Ot> = emptyList(),
     val seleccion: Ot? = null,
     val resultadosBusqueda: List<Ot> = emptyList(),
@@ -29,10 +30,21 @@ class MainViewModel(
 
     // --- Login admin (mock) ---
     fun loginAdmin(email: String, password: String) {
-// Mock simple: admin@gesticar.cl / admin
-        val ok = email.equals("admin@gesticar.cl", true) && password == "admin"
-        _ui.update { it.copy(adminLoggedIn = ok, usuarioAdmin = if (ok) email else null, mensaje = if (ok) null else "Credenciales inválidas") }
+        val user = repo.findUserByEmail(email)
+
+        // Regla de MVP: debe existir y ser ADMIN; password mock = "admin"
+        val ok = user?.rol == Rol.ADMIN && password == "admin"
+
+        _ui.update {
+            it.copy(
+                adminLoggedIn = ok,
+                usuarioAdmin = if (ok) user!!.email else null,
+                displayName  = if (ok) user!!.nombre else null,
+                mensaje = if (ok) null else "Credenciales inválidas"
+            )
+        }
     }
+
 
     fun logout() {
         _ui.update { it.copy(adminLoggedIn = false, usuarioAdmin = null) }

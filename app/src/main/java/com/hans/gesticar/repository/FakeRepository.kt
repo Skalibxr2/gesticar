@@ -38,6 +38,9 @@ class FakeRepository {
 
     fun nextOtNumber(): Int = otCounter.incrementAndGet()
 
+    fun findUserByEmail(email: String): Usuario? =
+        usuarios.firstOrNull { it.email.equals(email, ignoreCase = true) }
+
     fun crearCliente(nombre: String, telefono: String?, email: String?): Cliente {
         val c = Cliente(nombre = nombre, telefono = telefono, email = email)
         clientes += c

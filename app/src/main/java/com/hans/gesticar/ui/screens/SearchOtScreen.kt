@@ -11,7 +11,7 @@ import com.hans.gesticar.model.Ot
 import com.hans.gesticar.viewmodel.MainViewModel
 
 @Composable
-fun HomeScreen(vm: MainViewModel) {
+fun SearchOtScreen(vm: MainViewModel) {
     val ui by vm.ui.collectAsState()
 
     var nroTexto by remember { mutableStateOf("") }
@@ -64,3 +64,4 @@ private fun OtCard(ot: Ot) {
         }
     }
 }
+
