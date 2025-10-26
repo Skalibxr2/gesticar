@@ -9,7 +9,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun LoginScreen(onLogin: (String, String) -> Unit) {
+fun LoginScreen(errorMessage: String?, onLogin: (String, String) -> Unit) {
     var email by remember { mutableStateOf("admin@gesticar.cl") }
     var pass by remember { mutableStateOf("admin") }
 
@@ -18,6 +18,9 @@ fun LoginScreen(onLogin: (String, String) -> Unit) {
             Text("Ingreso Administrador", style = MaterialTheme.typography.titleLarge)
             OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, singleLine = true)
             OutlinedTextField(value = pass, onValueChange = { pass = it }, label = { Text("Contraseña") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
+            if (errorMessage != null) {
+                Text(errorMessage, color = MaterialTheme.colorScheme.error)
+            }
             Button(onClick = { onLogin(email, pass) }, modifier = Modifier.fillMaxWidth()) { Text("Ingresar") }
         }
     }
