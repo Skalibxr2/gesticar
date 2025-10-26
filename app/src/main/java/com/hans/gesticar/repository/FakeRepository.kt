@@ -3,7 +3,7 @@ package com.hans.gesticar.repository
 import com.hans.gesticar.model.*
 import java.util.concurrent.atomic.AtomicInteger
 
-class FakeRepository {
+class FakeRepository : Repository {
     private val otCounter = AtomicInteger(1000)
 
     val usuarios = mutableListOf(
@@ -39,7 +39,9 @@ class FakeRepository {
 
     fun nextOtNumber(): Int = otCounter.incrementAndGet()
 
-    fun findUserByEmail(email: String): Usuario? =
+    override suspend fun obtenerOts(): List<Ot> = ots.toList()
+
+    override suspend fun findUserByEmail(email: String): Usuario? =
         usuarios.firstOrNull { it.email.equals(email, ignoreCase = true) }
 
     fun validarCredenciales(email: String, password: String): Usuario? =
@@ -106,13 +108,13 @@ class FakeRepository {
         log(otId, "AGREGAR_ITEM:${tipo}/${desc}")
     }
 
-    fun aprobarPresupuesto(otId: String) {
+    override suspend fun aprobarPresupuesto(otId: String) {
         val p = obtenerPresupuesto(otId)
         p.aprobado = true
         log(otId, "APROBAR_PRESUPUESTO")
     }
 
-    fun cambiarEstado(otId: String, nuevo: OtState): Boolean {
+    override suspend fun cambiarEstado(otId: String, nuevo: OtState): Boolean {
         val ot = ots.find { it.id == otId } ?: return false
         val p = obtenerPresupuesto(otId)
         // Regla: no se puede EN_EJECUCION sin presupuesto aprobado
@@ -124,10 +126,9 @@ class FakeRepository {
         return true
     }
 
-    fun buscarOtPorNumero(numero: Int): Ot? = ots.find { it.numero == numero }
+    override suspend fun buscarOtPorNumero(numero: Int): Ot? = ots.find { it.numero == numero }
 
-
-    fun buscarOtPorPatente(patente: String): List<Ot> {
+    override suspend fun buscarOtPorPatente(patente: String): List<Ot> {
         val pat = patente.uppercase()
         val vehIds = vehiculos.filter { it.patente == pat }.map { it.id }.toSet()
         return ots.filter { it.vehiculoId in vehIds }

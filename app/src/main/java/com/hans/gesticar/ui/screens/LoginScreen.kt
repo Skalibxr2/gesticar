@@ -19,6 +19,9 @@ fun LoginScreen(uiState: UiState, onLogin: (String, String) -> Unit) {
             Text("Ingreso a GestiCar", style = MaterialTheme.typography.titleLarge)
             OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, singleLine = true)
             OutlinedTextField(value = pass, onValueChange = { pass = it }, label = { Text("Contraseña") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
+            if (errorMessage != null) {
+                Text(errorMessage, color = MaterialTheme.colorScheme.error)
+            }
             Button(onClick = { onLogin(email, pass) }, modifier = Modifier.fillMaxWidth()) { Text("Ingresar") }
             uiState.mensaje?.let {
                 Text(it, color = MaterialTheme.colorScheme.error)
