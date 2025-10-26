@@ -11,7 +11,9 @@ import kotlinx.coroutines.launch
 
 
 data class UiState(
-    val isLoggedIn: Boolean = false,
+    val adminLoggedIn: Boolean = false,
+    val usuarioAdmin: String? = null,
+    val displayName: String? = null,
     val usuarioActual: Usuario? = null,
     val ots: List<Ot> = emptyList(),
     val seleccion: Ot? = null,
@@ -27,22 +29,35 @@ class MainViewModel(
     val ui: StateFlow<UiState> = _ui
 
 
-    // --- Login admin (mock) ---
-    fun login(email: String, password: String) {
+    // --- Login ---
+    private fun performLogin(email: String, password: String) {
         val user = repo.validarCredenciales(email, password)
 
         _ui.update {
             it.copy(
-                isLoggedIn = user != null,
+                adminLoggedIn = user != null,
+                usuarioAdmin = user?.email,
+                displayName = user?.nombre,
                 usuarioActual = user,
                 mensaje = if (user == null) "Credenciales inválidas" else null
             )
         }
     }
 
+    fun login(email: String, password: String) = performLogin(email, password)
+
+    fun loginAdmin(email: String, password: String) = performLogin(email, password)
 
     fun logout() {
-        _ui.update { it.copy(isLoggedIn = false, usuarioActual = null, mensaje = null) }
+        _ui.update {
+            it.copy(
+                adminLoggedIn = false,
+                usuarioAdmin = null,
+                displayName = null,
+                usuarioActual = null,
+                mensaje = null
+            )
+        }
     }
 
     fun crearUsuario(nombre: String, email: String, password: String, rol: Rol): Boolean {

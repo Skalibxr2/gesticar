@@ -7,7 +7,8 @@ class FakeRepository {
     private val otCounter = AtomicInteger(1000)
 
     val usuarios = mutableListOf(
-        Usuario(nombre = "Admin", email = "admin@gesticar.cl", password = "admin", rol = Rol.ADMIN)
+        Usuario(nombre = "Admin", email = "admin@gesticar.cl", password = "admin", rol = Rol.ADMIN),
+        Usuario(nombre = "María Gómez", email = "maria@gesticar.cl", password = "mecanico", rol = Rol.MECANICO)
     )
     val clientes = mutableListOf<Cliente>()
     val vehiculos = mutableListOf<Vehiculo>()

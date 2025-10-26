@@ -22,7 +22,7 @@ fun HomeMenuScreen(vm: MainViewModel, nav: NavController) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
-            "Bienvenido${ui.usuarioActual?.let { ", ${it.nombre}" } ?: ""}",
+            "Bienvenido${ui.displayName?.let { ", ${it}" } ?: ""}",
             style = MaterialTheme.typography.headlineSmall
         )
         Text("¿Qué deseas hacer hoy?", style = MaterialTheme.typography.titleMedium)
@@ -54,7 +54,11 @@ fun HomeMenuScreen(vm: MainViewModel, nav: NavController) {
         }
 
         ui.mensaje?.let {
-            Text(it, color = MaterialTheme.colorScheme.secondary)
+            val isError = it.contains("error", ignoreCase = true) || it.contains("Solo", ignoreCase = true)
+            Text(
+                it,
+                color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
+            )
         }
     }
 

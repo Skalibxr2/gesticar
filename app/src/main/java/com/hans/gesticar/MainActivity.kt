@@ -32,8 +32,8 @@ class MainActivity : ComponentActivity() {
 
                     NavHost(navController = nav, startDestination = Routes.LOGIN) {
                         composable(Routes.LOGIN) {
-                            LaunchedEffect(uiState.isLoggedIn) {
-                                if (uiState.isLoggedIn) {
+                            LaunchedEffect(uiState.adminLoggedIn) {
+                                if (uiState.adminLoggedIn) {
                                     nav.navigate(Routes.HOME) {
                                         popUpTo(Routes.LOGIN) { inclusive = true }
                                     }
@@ -41,12 +41,12 @@ class MainActivity : ComponentActivity() {
                             }
                             LoginScreen(
                                 uiState = uiState,
-                                onLogin = { email, pass -> vm.login(email, pass) }
+                                onLogin = { email, pass -> vm.loginAdmin(email, pass) }
                             )
                         }
                         composable(Routes.HOME) {
-                            LaunchedEffect(uiState.isLoggedIn) {
-                                if (!uiState.isLoggedIn) {
+                            LaunchedEffect(uiState.adminLoggedIn) {
+                                if (!uiState.adminLoggedIn) {
                                     nav.navigate(Routes.LOGIN) {
                                         popUpTo(Routes.HOME) { inclusive = true }
                                     }
@@ -55,8 +55,8 @@ class MainActivity : ComponentActivity() {
                             HomeMenuScreen(vm = vm, nav = nav)
                         }
                         composable(Routes.SEARCH_OT) {
-                            LaunchedEffect(uiState.isLoggedIn) {
-                                if (!uiState.isLoggedIn) {
+                            LaunchedEffect(uiState.adminLoggedIn) {
+                                if (!uiState.adminLoggedIn) {
                                     nav.navigate(Routes.LOGIN) {
                                         popUpTo(Routes.SEARCH_OT) { inclusive = true }
                                     }

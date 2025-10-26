@@ -11,8 +11,8 @@ import com.hans.gesticar.viewmodel.UiState
 
 @Composable
 fun LoginScreen(uiState: UiState, onLogin: (String, String) -> Unit) {
-    var email by remember { mutableStateOf("") }
-    var pass by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("admin@gesticar.cl") }
+    var pass by remember { mutableStateOf("admin") }
 
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(Modifier.width(320.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
