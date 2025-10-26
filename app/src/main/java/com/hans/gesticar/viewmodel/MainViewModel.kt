@@ -1,24 +1,23 @@
 package com.hans.gesticar.viewmodel
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.hans.gesticar.model.Ot
 import com.hans.gesticar.model.OtState
 import com.hans.gesticar.model.Rol
+import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.repository.Repository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Dispatchers
 
 
 data class UiState(
     val estaAutenticado: Boolean = false,
     val usuarioActual: Usuario? = null,
     val displayName: String? = null,
-    val usuarioActual: Usuario? = null,
     val ots: List<Ot> = emptyList(),
     val seleccion: Ot? = null,
     val resultadosBusqueda: List<Ot> = emptyList(),
@@ -36,25 +35,30 @@ class MainViewModel(
         refreshOts()
     }
 
-    // --- Login admin (mock) ---
-    fun login(email: String, password: String) {
-        val user = repo.findUserByEmail(email)
-        val ok = user != null && repo.validarPassword(user, password)
-
-        _ui.update {
-            it.copy(
-                estaAutenticado = ok,
-                usuarioActual = if (ok) user else null,
-                displayName = if (ok) user!!.nombre else null,
-                resultadosBusqueda = emptyList(),
-                mensaje = if (ok) null else "Credenciales inválidas"
-            )
+    private fun refreshOts() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val ots = repo.obtenerOts()
+            _ui.update { it.copy(ots = ots) }
         }
     }
 
-    fun login(email: String, password: String) = performLogin(email, password)
+    // --- Login ---
+    fun login(email: String, password: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val user = repo.findUserByEmail(email)
+            val ok = user != null && (user.password.isBlank() || user.password == password)
 
-    fun loginAdmin(email: String, password: String) = performLogin(email, password)
+            _ui.update {
+                it.copy(
+                    estaAutenticado = ok,
+                    usuarioActual = if (ok) user else null,
+                    displayName = user?.nombre,
+                    resultadosBusqueda = emptyList(),
+                    mensaje = if (ok) null else "Credenciales inválidas"
+                )
+            }
+        }
+    }
 
     fun logout() {
         _ui.update {
@@ -66,7 +70,6 @@ class MainViewModel(
         }
     }
 
-
     // --- Búsquedas ---
     fun buscarPorNumero(numero: Int) {
         val usuario = _ui.value.usuarioActual
@@ -77,14 +80,16 @@ class MainViewModel(
             return
         }
 
-        val ot = repo.buscarOtPorNumero(numero)
-        val resultados = listOfNotNull(ot).filtrarPara(usuario)
-        val mensaje = when {
-            ot == null -> "Sin resultados"
-            resultados.isEmpty() -> "Esta OT no está asignada a ti"
-            else -> null
+        viewModelScope.launch(Dispatchers.IO) {
+            val ot = repo.buscarOtPorNumero(numero)
+            val resultados = listOfNotNull(ot).filtrarPara(usuario)
+            val mensaje = when {
+                ot == null -> "Sin resultados"
+                resultados.isEmpty() -> "Esta OT no está asignada a ti"
+                else -> null
+            }
+            _ui.update { it.copy(resultadosBusqueda = resultados, mensaje = mensaje) }
         }
-        _ui.update { it.copy(resultadosBusqueda = resultados, mensaje = mensaje) }
     }
 
     fun buscarPorPatente(patente: String) {
@@ -96,11 +101,12 @@ class MainViewModel(
             return
         }
 
-        val lista = repo.buscarOtPorPatente(patente).filtrarPara(usuario)
-        val mensaje = if (lista.isEmpty()) "Sin resultados" else null
-        _ui.update { it.copy(resultadosBusqueda = lista, mensaje = mensaje) }
+        viewModelScope.launch(Dispatchers.IO) {
+            val lista = repo.buscarOtPorPatente(patente).filtrarPara(usuario)
+            val mensaje = if (lista.isEmpty()) "Sin resultados" else null
+            _ui.update { it.copy(resultadosBusqueda = lista, mensaje = mensaje) }
+        }
     }
-
 
     // --- Acciones admin ---
     fun aprobarPresupuesto(otId: String) {
@@ -148,8 +154,6 @@ class MainViewModel(
             }
         }
     }
-
-
 }
 
 private fun List<Ot>.filtrarPara(usuario: Usuario?): List<Ot> {

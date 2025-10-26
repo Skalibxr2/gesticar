@@ -9,20 +9,19 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import com.hans.gesticar.ui.Routes
 import com.hans.gesticar.ui.screens.HomeMenuScreen
 import com.hans.gesticar.ui.screens.SearchOtScreen
 import com.hans.gesticar.ui.screens.LoginScreen
+import com.hans.gesticar.repository.SqliteRepository
 import com.hans.gesticar.viewmodel.MainViewModel
 import com.hans.gesticar.viewmodel.MainViewModelFactory
-import com.hans.gesticar.repository.SqliteRepository
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,7 +30,10 @@ class MainActivity : ComponentActivity() {
             MaterialTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     val nav = rememberNavController()
-                    val vm: MainViewModel = viewModel()
+                    val context = LocalContext.current
+                    val appContext = context.applicationContext
+                    val factory = remember(appContext) { MainViewModelFactory(SqliteRepository(appContext)) }
+                    val vm: MainViewModel = viewModel(factory = factory)
                     val uiState by vm.ui.collectAsState()
 
                     LaunchedEffect(uiState.estaAutenticado) {
@@ -50,8 +52,8 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         composable(Routes.HOME) {
-                            LaunchedEffect(uiState.adminLoggedIn) {
-                                if (!uiState.adminLoggedIn) {
+                            LaunchedEffect(uiState.estaAutenticado) {
+                                if (!uiState.estaAutenticado) {
                                     nav.navigate(Routes.LOGIN) {
                                         popUpTo(Routes.HOME) { inclusive = true }
                                     }
@@ -60,8 +62,8 @@ class MainActivity : ComponentActivity() {
                             HomeMenuScreen(vm = vm, nav = nav)
                         }
                         composable(Routes.SEARCH_OT) {
-                            LaunchedEffect(uiState.adminLoggedIn) {
-                                if (!uiState.adminLoggedIn) {
+                            LaunchedEffect(uiState.estaAutenticado) {
+                                if (!uiState.estaAutenticado) {
                                     nav.navigate(Routes.LOGIN) {
                                         popUpTo(Routes.SEARCH_OT) { inclusive = true }
                                     }
