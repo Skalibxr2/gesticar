@@ -7,12 +7,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.hans.gesticar.model.Rol
 import com.hans.gesticar.ui.Routes
 import com.hans.gesticar.viewmodel.MainViewModel
 
 @Composable
 fun HomeMenuScreen(vm: MainViewModel, nav: NavController) {
     val ui by vm.ui.collectAsState()
+    val usuario = ui.usuarioActual
 
     Column(
         Modifier.fillMaxSize().padding(16.dp),
@@ -22,22 +24,59 @@ fun HomeMenuScreen(vm: MainViewModel, nav: NavController) {
             "Bienvenido${if (ui.displayName!=null) ", ${ui.displayName}" else ""}",
             style = MaterialTheme.typography.headlineSmall
         )
-        Text("¿Qué deseas hacer hoy?", style = MaterialTheme.typography.titleMedium)
+        if (usuario == null) {
+            Text("Debes iniciar sesión para ver opciones.", style = MaterialTheme.typography.bodyMedium)
+        } else {
+            when (usuario.rol) {
+                Rol.ADMIN -> {
+                    Text("Panel de administración", style = MaterialTheme.typography.titleMedium)
+                    AdminActions(onBuscar = { nav.navigate(Routes.SEARCH_OT) })
+                }
+                Rol.MECANICO -> {
+                    Text("Panel de mecánico", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Solo puedes gestionar las OTs que te fueron asignadas.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    MechanicActions(onBuscar = { nav.navigate(Routes.SEARCH_OT) })
+                }
+            }
+        }
+    }
+}
 
-        // Opciones del administrador (agrega más cuando quieras)
-        Button(
-            onClick = { nav.navigate(Routes.SEARCH_OT) },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("Buscar Orden de Trabajo") }
+@Composable
+private fun AdminActions(onBuscar: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Button(onClick = { /* TODO: implementar creación de OT */ }, modifier = Modifier.fillMaxWidth()) {
+            Text("Crear Orden de Trabajo")
+        }
+        Button(onClick = { /* TODO: implementar asignación */ }, modifier = Modifier.fillMaxWidth()) {
+            Text("Asignar mecánico a OT")
+        }
+        Button(onClick = onBuscar, modifier = Modifier.fillMaxWidth()) {
+            Text("Buscar Orden de Trabajo")
+        }
+        Button(onClick = { /* TODO: implementar edición */ }, modifier = Modifier.fillMaxWidth()) {
+            Text("Editar Orden de Trabajo")
+        }
+        Button(onClick = { /* TODO: implementar cierre */ }, modifier = Modifier.fillMaxWidth()) {
+            Text("Cerrar Orden de Trabajo")
+        }
+    }
+}
 
-        Button(
-            onClick = { /* TODO: nav a Reportes */ },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("Ver Reportes") }
-
-        Button(
-            onClick = { /* TODO: nav a Crear OT */ },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("Crear nueva OT") }
+@Composable
+private fun MechanicActions(onBuscar: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Button(onClick = { /* TODO: ver OTs asignadas */ }, modifier = Modifier.fillMaxWidth()) {
+            Text("Ver mis OTs asignadas")
+        }
+        Button(onClick = onBuscar, modifier = Modifier.fillMaxWidth()) {
+            Text("Buscar mis OTs")
+        }
+        Button(onClick = { /* TODO: edición parcial */ }, modifier = Modifier.fillMaxWidth()) {
+            Text("Editar OT asignada")
+        }
     }
 }

@@ -8,17 +8,24 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.hans.gesticar.model.Ot
+import com.hans.gesticar.model.Rol
 import com.hans.gesticar.viewmodel.MainViewModel
 
 @Composable
 fun SearchOtScreen(vm: MainViewModel) {
     val ui by vm.ui.collectAsState()
+    val usuario = ui.usuarioActual
 
     var nroTexto by remember { mutableStateOf("") }
     var patente by remember { mutableStateOf("") }
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("GestiCar • Órdenes de Trabajo", style = MaterialTheme.typography.titleLarge)
+        when (usuario?.rol) {
+            Rol.ADMIN -> Text("Puedes administrar todas las órdenes registradas.")
+            Rol.MECANICO -> Text("Solo verás y podrás editar tus propias órdenes asignadas.")
+            else -> Text("Inicia sesión para realizar búsquedas.")
+        }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
@@ -43,7 +50,7 @@ fun SearchOtScreen(vm: MainViewModel) {
             Button(onClick = { if (patente.isNotBlank()) vm.buscarPorPatente(patente) }) { Text("Buscar Patente") }
         }
 
-        ui.mensaje?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
+        ui.mensaje?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
         Divider()
         Text("Resultados", style = MaterialTheme.typography.titleMedium)

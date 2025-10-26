@@ -11,8 +11,8 @@ import kotlinx.coroutines.launch
 
 
 data class UiState(
-    val adminLoggedIn: Boolean = false,
-    val usuarioAdmin: String? = null,
+    val estaAutenticado: Boolean = false,
+    val usuarioActual: Usuario? = null,
     val displayName: String? = null,
     val ots: List<Ot> = emptyList(),
     val seleccion: Ot? = null,
@@ -29,17 +29,16 @@ class MainViewModel(
 
 
     // --- Login admin (mock) ---
-    fun loginAdmin(email: String, password: String) {
+    fun login(email: String, password: String) {
         val user = repo.findUserByEmail(email)
-
-        // Regla de MVP: debe existir y ser ADMIN; password mock = "admin"
-        val ok = user?.rol == Rol.ADMIN && password == "admin"
+        val ok = user != null && repo.validarPassword(user, password)
 
         _ui.update {
             it.copy(
-                adminLoggedIn = ok,
-                usuarioAdmin = if (ok) user!!.email else null,
-                displayName  = if (ok) user!!.nombre else null,
+                estaAutenticado = ok,
+                usuarioActual = if (ok) user else null,
+                displayName = if (ok) user!!.nombre else null,
+                resultadosBusqueda = emptyList(),
                 mensaje = if (ok) null else "Credenciales inválidas"
             )
         }
@@ -47,19 +46,48 @@ class MainViewModel(
 
 
     fun logout() {
-        _ui.update { it.copy(adminLoggedIn = false, usuarioAdmin = null) }
+        _ui.update {
+            it.copy(
+                estaAutenticado = false,
+                usuarioActual = null,
+                resultadosBusqueda = emptyList()
+            )
+        }
     }
 
 
     // --- Búsquedas ---
     fun buscarPorNumero(numero: Int) {
+        val usuario = _ui.value.usuarioActual
+        if (usuario == null) {
+            _ui.update {
+                it.copy(resultadosBusqueda = emptyList(), mensaje = "Debes iniciar sesión para buscar órdenes.")
+            }
+            return
+        }
+
         val ot = repo.buscarOtPorNumero(numero)
-        _ui.update { it.copy(resultadosBusqueda = listOfNotNull(ot), mensaje = if (ot == null) "Sin resultados" else null) }
+        val resultados = listOfNotNull(ot).filtrarPara(usuario)
+        val mensaje = when {
+            ot == null -> "Sin resultados"
+            resultados.isEmpty() -> "Esta OT no está asignada a ti"
+            else -> null
+        }
+        _ui.update { it.copy(resultadosBusqueda = resultados, mensaje = mensaje) }
     }
 
     fun buscarPorPatente(patente: String) {
-        val lista = repo.buscarOtPorPatente(patente)
-        _ui.update { it.copy(resultadosBusqueda = lista, mensaje = if (lista.isEmpty()) "Sin resultados" else null) }
+        val usuario = _ui.value.usuarioActual
+        if (usuario == null) {
+            _ui.update {
+                it.copy(resultadosBusqueda = emptyList(), mensaje = "Debes iniciar sesión para buscar órdenes.")
+            }
+            return
+        }
+
+        val lista = repo.buscarOtPorPatente(patente).filtrarPara(usuario)
+        val mensaje = if (lista.isEmpty()) "Sin resultados" else null
+        _ui.update { it.copy(resultadosBusqueda = lista, mensaje = mensaje) }
     }
 
 
@@ -79,4 +107,11 @@ class MainViewModel(
     }
 
 
+}
+
+private fun List<Ot>.filtrarPara(usuario: Usuario?): List<Ot> {
+    if (usuario?.rol == Rol.MECANICO) {
+        return filter { it.mecanicoAsignadoId == usuario.id }
+    }
+    return this
 }

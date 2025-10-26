@@ -9,16 +9,34 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun LoginScreen(onLogin: (String, String) -> Unit) {
-    var email by remember { mutableStateOf("admin@gesticar.cl") }
-    var pass by remember { mutableStateOf("admin") }
+fun LoginScreen(mensaje: String?, onLogin: (String, String) -> Unit) {
+    var email by remember { mutableStateOf("") }
+    var pass by remember { mutableStateOf("") }
 
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(Modifier.width(320.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Ingreso Administrador", style = MaterialTheme.typography.titleLarge)
-            OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, singleLine = true)
-            OutlinedTextField(value = pass, onValueChange = { pass = it }, label = { Text("Contraseña") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
+            Text("Ingreso a GestiCar", style = MaterialTheme.typography.titleLarge)
+            OutlinedTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = { Text("Email") },
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = pass,
+                onValueChange = { pass = it },
+                label = { Text("Contraseña") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation()
+            )
+            if (mensaje != null) {
+                Text(mensaje, color = MaterialTheme.colorScheme.error)
+            }
             Button(onClick = { onLogin(email, pass) }, modifier = Modifier.fillMaxWidth()) { Text("Ingresar") }
+            Text(
+                "Administrador: admin@gesticar.cl / admin\nMecánico: mecanico@gesticar.cl / mecanico",
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }

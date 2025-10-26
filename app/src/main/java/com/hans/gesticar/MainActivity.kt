@@ -6,6 +6,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -24,18 +27,21 @@ class MainActivity : ComponentActivity() {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     val nav = rememberNavController()
                     val vm: MainViewModel = viewModel()
+                    val uiState by vm.ui.collectAsState()
+
+                    LaunchedEffect(uiState.estaAutenticado) {
+                        if (uiState.estaAutenticado) {
+                            nav.navigate(Routes.HOME) {
+                                popUpTo(Routes.LOGIN) { inclusive = true }
+                            }
+                        }
+                    }
 
                     NavHost(navController = nav, startDestination = Routes.LOGIN) {
                         composable(Routes.LOGIN) {
                             LoginScreen(
-                                onLogin = { email, pass ->
-                                    vm.loginAdmin(email, pass)
-                                    if (vm.ui.value.adminLoggedIn) {
-                                        nav.navigate(Routes.HOME) {
-                                            popUpTo(Routes.LOGIN) { inclusive = true }
-                                        }
-                                    }
-                                }
+                                mensaje = uiState.mensaje,
+                                onLogin = { email, pass -> vm.login(email, pass) }
                             )
                         }
                         composable(Routes.HOME) { HomeMenuScreen(vm = vm, nav = nav) }
