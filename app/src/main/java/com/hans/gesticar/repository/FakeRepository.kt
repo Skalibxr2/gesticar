@@ -7,7 +7,8 @@ class FakeRepository : Repository {
     private val otCounter = AtomicInteger(1000)
 
     val usuarios = mutableListOf(
-        Usuario(nombre = "Admin", email = "admin@gesticar.cl", rol = Rol.ADMIN)
+        Usuario(nombre = "Admin", email = "admin@gesticar.cl", password = "admin", rol = Rol.ADMIN),
+        Usuario(nombre = "María Gómez", email = "maria@gesticar.cl", password = "mecanico", rol = Rol.MECANICO)
     )
     val clientes = mutableListOf<Cliente>()
     val vehiculos = mutableListOf<Vehiculo>()
@@ -42,6 +43,18 @@ class FakeRepository : Repository {
 
     override suspend fun findUserByEmail(email: String): Usuario? =
         usuarios.firstOrNull { it.email.equals(email, ignoreCase = true) }
+
+    fun validarCredenciales(email: String, password: String): Usuario? =
+        usuarios.firstOrNull { it.email.equals(email, ignoreCase = true) && it.password == password }
+
+    fun crearUsuario(nombre: String, email: String, password: String, rol: Rol): Usuario {
+        if (usuarios.any { it.email.equals(email, ignoreCase = true) }) {
+            throw IllegalArgumentException("El correo ya está registrado")
+        }
+        val user = Usuario(nombre = nombre, email = email, password = password, rol = rol)
+        usuarios += user
+        return user
+    }
 
     fun crearCliente(nombre: String, telefono: String?, email: String?): Cliente {
         val c = Cliente(nombre = nombre, telefono = telefono, email = email)
