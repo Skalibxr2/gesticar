@@ -10,6 +10,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import com.hans.gesticar.ui.Routes
 import com.hans.gesticar.ui.screens.HomeMenuScreen
 import com.hans.gesticar.ui.screens.SearchOtScreen
@@ -25,21 +28,42 @@ class MainActivity : ComponentActivity() {
                     val nav = rememberNavController()
                     val vm: MainViewModel = viewModel()
 
+                    val uiState by vm.ui.collectAsState()
+
                     NavHost(navController = nav, startDestination = Routes.LOGIN) {
                         composable(Routes.LOGIN) {
-                            LoginScreen(
-                                onLogin = { email, pass ->
-                                    vm.loginAdmin(email, pass)
-                                    if (vm.ui.value.adminLoggedIn) {
-                                        nav.navigate(Routes.HOME) {
-                                            popUpTo(Routes.LOGIN) { inclusive = true }
-                                        }
+                            LaunchedEffect(uiState.isLoggedIn) {
+                                if (uiState.isLoggedIn) {
+                                    nav.navigate(Routes.HOME) {
+                                        popUpTo(Routes.LOGIN) { inclusive = true }
                                     }
                                 }
+                            }
+                            LoginScreen(
+                                uiState = uiState,
+                                onLogin = { email, pass -> vm.login(email, pass) }
                             )
                         }
-                        composable(Routes.HOME) { HomeMenuScreen(vm = vm, nav = nav) }
-                        composable(Routes.SEARCH_OT) { SearchOtScreen(vm = vm) }
+                        composable(Routes.HOME) {
+                            LaunchedEffect(uiState.isLoggedIn) {
+                                if (!uiState.isLoggedIn) {
+                                    nav.navigate(Routes.LOGIN) {
+                                        popUpTo(Routes.HOME) { inclusive = true }
+                                    }
+                                }
+                            }
+                            HomeMenuScreen(vm = vm, nav = nav)
+                        }
+                        composable(Routes.SEARCH_OT) {
+                            LaunchedEffect(uiState.isLoggedIn) {
+                                if (!uiState.isLoggedIn) {
+                                    nav.navigate(Routes.LOGIN) {
+                                        popUpTo(Routes.SEARCH_OT) { inclusive = true }
+                                    }
+                                }
+                            }
+                            SearchOtScreen(vm = vm)
+                        }
                     }
                 }
             }

@@ -13,6 +13,7 @@ data class Usuario(
     val id: String = UUID.randomUUID().toString(),
     val nombre: String,
     val email: String,
+    val password: String,
     val rol: Rol
 )
 

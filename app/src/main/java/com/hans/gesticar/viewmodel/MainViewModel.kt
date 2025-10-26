@@ -11,9 +11,8 @@ import kotlinx.coroutines.launch
 
 
 data class UiState(
-    val adminLoggedIn: Boolean = false,
-    val usuarioAdmin: String? = null,
-    val displayName: String? = null,
+    val isLoggedIn: Boolean = false,
+    val usuarioActual: Usuario? = null,
     val ots: List<Ot> = emptyList(),
     val seleccion: Ot? = null,
     val resultadosBusqueda: List<Ot> = emptyList(),
@@ -29,25 +28,40 @@ class MainViewModel(
 
 
     // --- Login admin (mock) ---
-    fun loginAdmin(email: String, password: String) {
-        val user = repo.findUserByEmail(email)
-
-        // Regla de MVP: debe existir y ser ADMIN; password mock = "admin"
-        val ok = user?.rol == Rol.ADMIN && password == "admin"
+    fun login(email: String, password: String) {
+        val user = repo.validarCredenciales(email, password)
 
         _ui.update {
             it.copy(
-                adminLoggedIn = ok,
-                usuarioAdmin = if (ok) user!!.email else null,
-                displayName  = if (ok) user!!.nombre else null,
-                mensaje = if (ok) null else "Credenciales inválidas"
+                isLoggedIn = user != null,
+                usuarioActual = user,
+                mensaje = if (user == null) "Credenciales inválidas" else null
             )
         }
     }
 
 
     fun logout() {
-        _ui.update { it.copy(adminLoggedIn = false, usuarioAdmin = null) }
+        _ui.update { it.copy(isLoggedIn = false, usuarioActual = null, mensaje = null) }
+    }
+
+    fun crearUsuario(nombre: String, email: String, password: String, rol: Rol): Boolean {
+        val actual = _ui.value.usuarioActual
+        if (actual?.rol != Rol.ADMIN) {
+            _ui.update { it.copy(mensaje = "Solo un administrador puede crear usuarios") }
+            return false
+        }
+
+        val resultado = runCatching { repo.crearUsuario(nombre, email, password, rol) }
+        _ui.update {
+            it.copy(
+                mensaje = resultado.fold(
+                    onSuccess = { "Usuario creado correctamente" },
+                    onFailure = { it.message ?: "Error al crear usuario" }
+                )
+            )
+        }
+        return resultado.isSuccess
     }
 
 
