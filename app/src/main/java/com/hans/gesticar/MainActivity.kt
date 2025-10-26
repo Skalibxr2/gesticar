@@ -9,8 +9,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -33,33 +31,22 @@ class MainActivity : ComponentActivity() {
             MaterialTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     val nav = rememberNavController()
-                    val context = LocalContext.current
-                    val repository = remember { SqliteRepository(context.applicationContext) }
-                    val vm: MainViewModel = viewModel(factory = MainViewModelFactory(repository))
-                    val ui by vm.ui.collectAsState()
+                    val vm: MainViewModel = viewModel()
+                    val uiState by vm.ui.collectAsState()
 
-                    LaunchedEffect(ui.adminLoggedIn) {
-                        if (ui.adminLoggedIn) {
+                    LaunchedEffect(uiState.estaAutenticado) {
+                        if (uiState.estaAutenticado) {
                             nav.navigate(Routes.HOME) {
                                 popUpTo(Routes.LOGIN) { inclusive = true }
                             }
                         }
                     }
 
-                    val uiState by vm.ui.collectAsState()
-
                     NavHost(navController = nav, startDestination = Routes.LOGIN) {
                         composable(Routes.LOGIN) {
-                            LaunchedEffect(uiState.adminLoggedIn) {
-                                if (uiState.adminLoggedIn) {
-                                    nav.navigate(Routes.HOME) {
-                                        popUpTo(Routes.LOGIN) { inclusive = true }
-                                    }
-                                }
-                            }
                             LoginScreen(
-                                uiState = uiState,
-                                onLogin = { email, pass -> vm.loginAdmin(email, pass) }
+                                mensaje = uiState.mensaje,
+                                onLogin = { email, pass -> vm.login(email, pass) }
                             )
                         }
                         composable(Routes.HOME) {

@@ -15,8 +15,8 @@ import kotlinx.coroutines.Dispatchers
 
 
 data class UiState(
-    val adminLoggedIn: Boolean = false,
-    val usuarioAdmin: String? = null,
+    val estaAutenticado: Boolean = false,
+    val usuarioActual: Usuario? = null,
     val displayName: String? = null,
     val usuarioActual: Usuario? = null,
     val ots: List<Ot> = emptyList(),
@@ -36,24 +36,18 @@ class MainViewModel(
         refreshOts()
     }
 
-    private fun refreshOts() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val ots = repo.obtenerOts()
-            _ui.update { it.copy(ots = ots) }
-        }
-    }
-
-    // --- Login ---
-    private fun performLogin(email: String, password: String) {
-        val user = repo.validarCredenciales(email, password)
+    // --- Login admin (mock) ---
+    fun login(email: String, password: String) {
+        val user = repo.findUserByEmail(email)
+        val ok = user != null && repo.validarPassword(user, password)
 
         _ui.update {
             it.copy(
-                adminLoggedIn = user != null,
-                usuarioAdmin = user?.email,
-                displayName = user?.nombre,
-                usuarioActual = user,
-                mensaje = if (user == null) "Credenciales inválidas" else null
+                estaAutenticado = ok,
+                usuarioActual = if (ok) user else null,
+                displayName = if (ok) user!!.nombre else null,
+                resultadosBusqueda = emptyList(),
+                mensaje = if (ok) null else "Credenciales inválidas"
             )
         }
     }
@@ -65,58 +59,46 @@ class MainViewModel(
     fun logout() {
         _ui.update {
             it.copy(
-                adminLoggedIn = false,
-                usuarioAdmin = null,
-                displayName = null,
+                estaAutenticado = false,
                 usuarioActual = null,
-                mensaje = null
+                resultadosBusqueda = emptyList()
             )
         }
-    }
-
-    fun crearUsuario(nombre: String, email: String, password: String, rol: Rol): Boolean {
-        val actual = _ui.value.usuarioActual
-        if (actual?.rol != Rol.ADMIN) {
-            _ui.update { it.copy(mensaje = "Solo un administrador puede crear usuarios") }
-            return false
-        }
-
-        val resultado = runCatching { repo.crearUsuario(nombre, email, password, rol) }
-        _ui.update {
-            it.copy(
-                mensaje = resultado.fold(
-                    onSuccess = { "Usuario creado correctamente" },
-                    onFailure = { it.message ?: "Error al crear usuario" }
-                )
-            )
-        }
-        return resultado.isSuccess
     }
 
 
     // --- Búsquedas ---
     fun buscarPorNumero(numero: Int) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val ot = repo.buscarOtPorNumero(numero)
+        val usuario = _ui.value.usuarioActual
+        if (usuario == null) {
             _ui.update {
-                it.copy(
-                    resultadosBusqueda = listOfNotNull(ot),
-                    mensaje = if (ot == null) "Sin resultados" else null
-                )
+                it.copy(resultadosBusqueda = emptyList(), mensaje = "Debes iniciar sesión para buscar órdenes.")
             }
+            return
         }
+
+        val ot = repo.buscarOtPorNumero(numero)
+        val resultados = listOfNotNull(ot).filtrarPara(usuario)
+        val mensaje = when {
+            ot == null -> "Sin resultados"
+            resultados.isEmpty() -> "Esta OT no está asignada a ti"
+            else -> null
+        }
+        _ui.update { it.copy(resultadosBusqueda = resultados, mensaje = mensaje) }
     }
 
     fun buscarPorPatente(patente: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val lista = repo.buscarOtPorPatente(patente)
+        val usuario = _ui.value.usuarioActual
+        if (usuario == null) {
             _ui.update {
-                it.copy(
-                    resultadosBusqueda = lista,
-                    mensaje = if (lista.isEmpty()) "Sin resultados" else null
-                )
+                it.copy(resultadosBusqueda = emptyList(), mensaje = "Debes iniciar sesión para buscar órdenes.")
             }
+            return
         }
+
+        val lista = repo.buscarOtPorPatente(patente).filtrarPara(usuario)
+        val mensaje = if (lista.isEmpty()) "Sin resultados" else null
+        _ui.update { it.copy(resultadosBusqueda = lista, mensaje = mensaje) }
     }
 
 
@@ -170,12 +152,9 @@ class MainViewModel(
 
 }
 
-class MainViewModelFactory(private val repository: Repository) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return MainViewModel(repository) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
+private fun List<Ot>.filtrarPara(usuario: Usuario?): List<Ot> {
+    if (usuario?.rol == Rol.MECANICO) {
+        return filter { it.mecanicoAsignadoId == usuario.id }
     }
+    return this
 }

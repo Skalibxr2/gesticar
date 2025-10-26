@@ -15,7 +15,7 @@ import com.hans.gesticar.viewmodel.MainViewModel
 @Composable
 fun HomeMenuScreen(vm: MainViewModel, nav: NavController) {
     val ui by vm.ui.collectAsState()
-    var showCreateUser by remember { mutableStateOf(false) }
+    val usuario = ui.usuarioActual
 
     Column(
         Modifier.fillMaxSize().padding(16.dp),
@@ -25,53 +25,60 @@ fun HomeMenuScreen(vm: MainViewModel, nav: NavController) {
             "Bienvenido${ui.displayName?.let { ", ${it}" } ?: ""}",
             style = MaterialTheme.typography.headlineSmall
         )
-        Text("¿Qué deseas hacer hoy?", style = MaterialTheme.typography.titleMedium)
-
-        // Opciones del administrador (agrega más cuando quieras)
-        Button(
-            onClick = { nav.navigate(Routes.SEARCH_OT) },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("Buscar Orden de Trabajo") }
-
-        Button(
-            onClick = { /* TODO: nav a Reportes */ },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("Ver Reportes") }
-
-        Button(
-            onClick = { /* TODO: nav a Crear OT */ },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("Crear nueva OT") }
-
-        if (ui.usuarioActual?.rol == Rol.ADMIN) {
-            Button(onClick = { showCreateUser = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("Crear usuario")
-            }
-        }
-
-        Button(onClick = { vm.logout() }, modifier = Modifier.fillMaxWidth()) {
-            Text("Cerrar sesión")
-        }
-
-        ui.mensaje?.let {
-            val isError = it.contains("error", ignoreCase = true) || it.contains("Solo", ignoreCase = true)
-            Text(
-                it,
-                color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
-            )
-        }
-    }
-
-    if (showCreateUser) {
-        CrearUsuarioDialog(
-            onDismiss = { showCreateUser = false },
-            onCreate = { nombre, email, password, rol ->
-                val creado = vm.crearUsuario(nombre, email, password, rol)
-                if (creado) {
-                    showCreateUser = false
+        if (usuario == null) {
+            Text("Debes iniciar sesión para ver opciones.", style = MaterialTheme.typography.bodyMedium)
+        } else {
+            when (usuario.rol) {
+                Rol.ADMIN -> {
+                    Text("Panel de administración", style = MaterialTheme.typography.titleMedium)
+                    AdminActions(onBuscar = { nav.navigate(Routes.SEARCH_OT) })
+                }
+                Rol.MECANICO -> {
+                    Text("Panel de mecánico", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Solo puedes gestionar las OTs que te fueron asignadas.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    MechanicActions(onBuscar = { nav.navigate(Routes.SEARCH_OT) })
                 }
             }
-        )
+        }
+    }
+}
+
+@Composable
+private fun AdminActions(onBuscar: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Button(onClick = { /* TODO: implementar creación de OT */ }, modifier = Modifier.fillMaxWidth()) {
+            Text("Crear Orden de Trabajo")
+        }
+        Button(onClick = { /* TODO: implementar asignación */ }, modifier = Modifier.fillMaxWidth()) {
+            Text("Asignar mecánico a OT")
+        }
+        Button(onClick = onBuscar, modifier = Modifier.fillMaxWidth()) {
+            Text("Buscar Orden de Trabajo")
+        }
+        Button(onClick = { /* TODO: implementar edición */ }, modifier = Modifier.fillMaxWidth()) {
+            Text("Editar Orden de Trabajo")
+        }
+        Button(onClick = { /* TODO: implementar cierre */ }, modifier = Modifier.fillMaxWidth()) {
+            Text("Cerrar Orden de Trabajo")
+        }
+    }
+}
+
+@Composable
+private fun MechanicActions(onBuscar: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Button(onClick = { /* TODO: ver OTs asignadas */ }, modifier = Modifier.fillMaxWidth()) {
+            Text("Ver mis OTs asignadas")
+        }
+        Button(onClick = onBuscar, modifier = Modifier.fillMaxWidth()) {
+            Text("Buscar mis OTs")
+        }
+        Button(onClick = { /* TODO: edición parcial */ }, modifier = Modifier.fillMaxWidth()) {
+            Text("Editar OT asignada")
+        }
     }
 }
 

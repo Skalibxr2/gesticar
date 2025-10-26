@@ -7,8 +7,18 @@ class FakeRepository : Repository {
     private val otCounter = AtomicInteger(1000)
 
     val usuarios = mutableListOf(
-        Usuario(nombre = "Admin", email = "admin@gesticar.cl", password = "admin", rol = Rol.ADMIN),
-        Usuario(nombre = "María Gómez", email = "maria@gesticar.cl", password = "mecanico", rol = Rol.MECANICO)
+        Usuario(
+            nombre = "Admin",
+            email = "admin@gesticar.cl",
+            password = "admin",
+            rol = Rol.ADMIN
+        ),
+        Usuario(
+            nombre = "Mecánico Juan",
+            email = "mecanico@gesticar.cl",
+            password = "mecanico",
+            rol = Rol.MECANICO
+        )
     )
     val clientes = mutableListOf<Cliente>()
     val vehiculos = mutableListOf<Vehiculo>()
@@ -32,7 +42,9 @@ class FakeRepository : Repository {
             combustible = "Gasolina"
         )
         vehiculos += v
+        val mecanico = usuarios.first { it.rol == Rol.MECANICO }
         val ot = crearOT(vehiculoId = v.id, notas = "Ruidos en tren delantero")
+        ot.mecanicoAsignadoId = mecanico.id
         agregarItemPresupuesto(ot.id, ItemTipo.MO, "Diagnóstico", 1, 15000)
         agregarItemPresupuesto(ot.id, ItemTipo.REP, "Bujías", 4, 8000)
     }
@@ -44,17 +56,12 @@ class FakeRepository : Repository {
     override suspend fun findUserByEmail(email: String): Usuario? =
         usuarios.firstOrNull { it.email.equals(email, ignoreCase = true) }
 
-    fun validarCredenciales(email: String, password: String): Usuario? =
-        usuarios.firstOrNull { it.email.equals(email, ignoreCase = true) && it.password == password }
+    fun validarPassword(usuario: Usuario, password: String): Boolean =
+        usuario.password == password
 
-    fun crearUsuario(nombre: String, email: String, password: String, rol: Rol): Usuario {
-        if (usuarios.any { it.email.equals(email, ignoreCase = true) }) {
-            throw IllegalArgumentException("El correo ya está registrado")
-        }
-        val user = Usuario(nombre = nombre, email = email, password = password, rol = rol)
-        usuarios += user
-        return user
-    }
+    fun obtenerUsuario(id: String): Usuario? = usuarios.firstOrNull { it.id == id }
+
+    fun obtenerMecanicos(): List<Usuario> = usuarios.filter { it.rol == Rol.MECANICO }
 
     fun crearCliente(nombre: String, telefono: String?, email: String?): Cliente {
         val c = Cliente(nombre = nombre, telefono = telefono, email = email)
@@ -87,6 +94,15 @@ class FakeRepository : Repository {
         presupuestos[ot.id] = Presupuesto(otId = ot.id)
         log(ot.id, "CREAR_OT")
         return ot
+    }
+
+    fun asignarMecanico(otId: String, mecanicoId: String): Boolean {
+        val ot = ots.find { it.id == otId } ?: return false
+        val mecanico = obtenerUsuario(mecanicoId) ?: return false
+        if (mecanico.rol != Rol.MECANICO) return false
+        ot.mecanicoAsignadoId = mecanicoId
+        log(otId, "ASIGNAR_MECANICO:${mecanico.email}")
+        return true
     }
 
     fun obtenerPresupuesto(otId: String): Presupuesto = presupuestos.getValue(otId)
