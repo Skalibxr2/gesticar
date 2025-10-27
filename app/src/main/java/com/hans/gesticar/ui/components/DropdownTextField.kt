@@ -58,7 +58,7 @@ fun DropdownTextField(
             modifier = Modifier
                 .fillMaxWidth()
                 .onGloballyPositioned { coordinates ->
-                    menuWidth = with(density) { coordinates.size.width.toFloat().toDp() }
+                    menuWidth = with(density) { coordinates.size.width.toDp() }
                 }
                 .clickable(
                     interactionSource = interactionSource,
@@ -69,10 +69,11 @@ fun DropdownTextField(
                     }
                 }
         )
+        val dropdownModifier = if (menuWidth > 0.dp) Modifier.width(menuWidth) else Modifier
         DropdownMenu(
             expanded = expanded && enabled,
             onDismissRequest = onDismissRequest,
-            modifier = Modifier.width(menuWidth)
+            modifier = dropdownModifier
         ) {
             dropdownContent(onDismissRequest)
         }

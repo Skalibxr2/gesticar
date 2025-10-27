@@ -51,11 +51,13 @@ import com.hans.gesticar.model.PresupuestoItem
 import com.hans.gesticar.model.Rol
 import com.hans.gesticar.model.TareaOt
 import com.hans.gesticar.model.Usuario
+import com.hans.gesticar.model.Vehiculo
 import com.hans.gesticar.ui.components.DropdownTextField
 import com.hans.gesticar.ui.components.VehiclePhotosSection
 import com.hans.gesticar.util.formatRutInput
 import com.hans.gesticar.util.normalizeRut
 import com.hans.gesticar.viewmodel.MainViewModel
+import com.hans.gesticar.viewmodel.DetalleMensajes
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -199,6 +201,8 @@ fun SearchOtScreen(vm: MainViewModel) {
             OtDetailPanel(
                 detalle = detalle,
                 mecanicos = ui.mecanicosDisponibles,
+                vehiculosCliente = ui.vehiculosCliente,
+                mensajes = ui.detalleMensajes,
                 onGuardarDatos = { notas, mecanicosIds, patenteNueva ->
                     vm.guardarDatosOt(detalle.ot.id, notas, mecanicosIds, patenteNueva)
                 },
@@ -268,6 +272,8 @@ private class EditableTaskState(
 private fun OtDetailPanel(
     detalle: OtDetalle,
     mecanicos: List<Usuario>,
+    vehiculosCliente: List<Vehiculo>,
+    mensajes: DetalleMensajes,
     onGuardarDatos: (String?, List<String>, String?) -> Unit,
     onGuardarPresupuesto: (List<PresupuestoItem>, Boolean, Int) -> Unit,
     onGuardarTareas: (List<TareaOt>) -> Unit,
@@ -280,18 +286,20 @@ private fun OtDetailPanel(
     var patente by remember { mutableStateOf(detalle.vehiculo?.patente ?: detalle.ot.vehiculoPatente) }
     val mecanicosSeleccionados = remember { mutableStateListOf<String>() }
     var selectorMecanicosExpandido by remember { mutableStateOf(false) }
+    var selectorVehiculoExpandido by remember { mutableStateOf(false) }
     var presupuestoAprobado by remember { mutableStateOf(detalle.presupuesto.aprobado) }
     var ivaTexto by remember { mutableStateOf(detalle.presupuesto.ivaPorc.toString()) }
     val items = remember { mutableStateListOf<PresupuestoItemFormState>() }
     val tareas = remember { mutableStateListOf<EditableTaskState>() }
     var presupuestoError by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(detalle.ot.id) {
+    LaunchedEffect(detalle.ot.id, vehiculosCliente) {
         notas = detalle.ot.notas.orEmpty()
         patente = detalle.vehiculo?.patente ?: detalle.ot.vehiculoPatente
         mecanicosSeleccionados.clear()
         mecanicosSeleccionados.addAll(detalle.ot.mecanicosAsignados)
         selectorMecanicosExpandido = false
+        selectorVehiculoExpandido = false
         presupuestoAprobado = detalle.presupuesto.aprobado
         ivaTexto = detalle.presupuesto.ivaPorc.toString()
         items.clear()
@@ -327,9 +335,14 @@ private fun OtDetailPanel(
     }
     // Una OT finalizada queda solo para consulta; bloqueamos todas las acciones.
     val soloLectura = detalle.ot.estado == OtState.FINALIZADA
+    val tieneItemsValidos = items.any { item ->
+        val cantidad = item.cantidad.toIntOrNull() ?: 0
+        val precio = item.precio.toIntOrNull() ?: 0
+        item.descripcion.isNotBlank() && cantidad > 0 && precio > 0
+    }
     val puedeIniciar = detalle.ot.estado !in listOf(OtState.EN_EJECUCION, OtState.FINALIZADA) &&
-        detalle.presupuesto.aprobado && detalle.presupuesto.items.isNotEmpty() &&
-        detalle.cliente != null && detalle.vehiculo != null && detalle.ot.mecanicosAsignados.isNotEmpty()
+        presupuestoAprobado && tieneItemsValidos &&
+        detalle.cliente != null && patente.isNotBlank() && mecanicosSeleccionados.isNotEmpty()
     val puedeFinalizar = detalle.ot.estado == OtState.EN_EJECUCION
 
     ElevatedCard(
@@ -353,24 +366,53 @@ private fun OtDetailPanel(
             detalle.cliente?.let { cliente ->
                 Text("Cliente: ${cliente.nombre} (${cliente.rut})", style = MaterialTheme.typography.bodyMedium)
             } ?: Text("Cliente: no registrado", color = MaterialTheme.colorScheme.error)
-            detalle.vehiculo?.let { vehiculo ->
+            val vehiculoActual = vehiculosCliente.firstOrNull { it.patente == patente } ?: detalle.vehiculo
+            vehiculoActual?.let { vehiculo ->
                 Text("Vehículo actual: ${vehiculo.marca} ${vehiculo.modelo} (${vehiculo.patente})")
             } ?: Text("Vehículo no registrado", color = MaterialTheme.colorScheme.error)
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Datos generales", style = MaterialTheme.typography.titleSmall)
-                OutlinedTextField(
-                    value = patente,
-                    onValueChange = { patente = it.uppercase() },
-                    label = { Text("Patente asociada") },
-                    enabled = vehiculoEditable && !soloLectura,
-                    modifier = Modifier.fillMaxWidth(),
-                    supportingText = {
-                        if (!vehiculoEditable) {
-                            Text("No es posible cambiar el vehículo una vez iniciada la OT")
+                DropdownTextField(
+                    value = vehiculoActual?.let { "${it.patente} • ${it.marca} ${it.modelo}" }
+                        ?: patente,
+                    label = "Vehículo asociado",
+                    expanded = selectorVehiculoExpandido,
+                    onExpandedChange = { selectorVehiculoExpandido = it },
+                    onDismissRequest = { selectorVehiculoExpandido = false },
+                    enabled = vehiculoEditable && !soloLectura && vehiculosCliente.isNotEmpty(),
+                    placeholder = { Text("Selecciona un vehículo registrado") },
+                    modifier = Modifier.fillMaxWidth()
+                ) { closeMenu ->
+                    if (vehiculosCliente.isEmpty()) {
+                        DropdownMenuItem(
+                            text = { Text("Sin vehículos disponibles") },
+                            onClick = {},
+                            enabled = false
+                        )
+                    } else {
+                        vehiculosCliente.forEach { vehiculo ->
+                            DropdownMenuItem(
+                                text = { Text("${vehiculo.patente} • ${vehiculo.marca} ${vehiculo.modelo}") },
+                                onClick = {
+                                    patente = vehiculo.patente
+                                    closeMenu()
+                                }
+                            )
                         }
                     }
-                )
+                }
+                if (!vehiculoEditable) {
+                    Text(
+                        "No es posible cambiar el vehículo una vez iniciada la OT",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                } else if (vehiculosCliente.isEmpty()) {
+                    Text(
+                        "El cliente no tiene otros vehículos registrados",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
                 OutlinedTextField(
                     value = notas,
                     onValueChange = { notas = it },
@@ -440,6 +482,13 @@ private fun OtDetailPanel(
                     enabled = !soloLectura
                 ) {
                     Text("Guardar datos generales")
+                }
+                mensajes.datos?.let { mensaje ->
+                    Text(
+                        mensaje.text,
+                        color = if (mensaje.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
                 VehiclePhotosSection(
                     receptionTitle = "Evidencia al recibir el vehículo",
@@ -532,6 +581,13 @@ private fun OtDetailPanel(
                 ) {
                     Text("Guardar presupuesto")
                 }
+                mensajes.presupuesto?.let { mensaje ->
+                    Text(
+                        mensaje.text,
+                        color = if (mensaje.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
 
             Divider()
@@ -591,6 +647,13 @@ private fun OtDetailPanel(
                 ) {
                     Text("Guardar tareas")
                 }
+                mensajes.tareas?.let { mensaje ->
+                    Text(
+                        mensaje.text,
+                        color = if (mensaje.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
 
             Divider()
@@ -602,6 +665,13 @@ private fun OtDetailPanel(
                 Button(onClick = onFinalizar, enabled = puedeFinalizar && !soloLectura) {
                     Text("Finalizar OT")
                 }
+            }
+            mensajes.estado?.let { mensaje ->
+                Text(
+                    mensaje.text,
+                    color = if (mensaje.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
     }
