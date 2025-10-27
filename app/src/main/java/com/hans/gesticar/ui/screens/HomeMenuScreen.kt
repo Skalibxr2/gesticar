@@ -29,6 +29,15 @@ fun HomeMenuScreen(vm: MainViewModel, nav: NavController) {
         if (usuario == null) {
             Text("Debes iniciar sesión para ver opciones.", style = MaterialTheme.typography.bodyMedium)
         } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                OutlinedButton(onClick = { vm.logout() }) {
+                    Text("Cerrar sesión")
+                }
+            }
+
             when (usuario.rol) {
                 Rol.ADMIN -> {
                     Text("Panel de administración", style = MaterialTheme.typography.titleMedium)
@@ -59,12 +68,6 @@ private fun AdminActions(onCrear: () -> Unit, onBuscar: () -> Unit) {
         Button(onClick = onBuscar, modifier = Modifier.fillMaxWidth()) {
             Text("Buscar Orden de Trabajo")
         }
-        Button(onClick = { /* TODO: implementar edición */ }, modifier = Modifier.fillMaxWidth()) {
-            Text("Editar Orden de Trabajo")
-        }
-        Button(onClick = { /* TODO: implementar cierre */ }, modifier = Modifier.fillMaxWidth()) {
-            Text("Cerrar Orden de Trabajo")
-        }
     }
 }
 
@@ -76,9 +79,6 @@ private fun MechanicActions(onBuscar: () -> Unit) {
         }
         Button(onClick = onBuscar, modifier = Modifier.fillMaxWidth()) {
             Text("Buscar mis OTs")
-        }
-        Button(onClick = { /* TODO: edición parcial */ }, modifier = Modifier.fillMaxWidth()) {
-            Text("Editar OT asignada")
         }
     }
 }
