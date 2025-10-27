@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -16,13 +18,14 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -38,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -48,7 +52,6 @@ import com.hans.gesticar.model.PresupuestoItem
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
 import com.hans.gesticar.ui.Routes
-import com.hans.gesticar.ui.components.DropdownTextField
 import com.hans.gesticar.viewmodel.MainViewModel
 import com.hans.gesticar.util.formatRutInput
 import com.hans.gesticar.util.isRutValid
@@ -521,42 +524,52 @@ private fun VehiculoSection(
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Datos del vehículo", style = MaterialTheme.typography.titleMedium)
-            val hayVehiculos = vehiculos.isNotEmpty()
-            var expanded by remember { mutableStateOf(false) }
-            val descripcionSeleccionado = vehiculos.firstOrNull { it.patente == vehiculoSeleccionado }
-                ?.let { "${it.patente} • ${it.marca} ${it.modelo}" }
-                ?: vehiculoSeleccionado.orEmpty()
-            DropdownTextField(
-                value = descripcionSeleccionado,
-                label = "Vehículos registrados",
-                expanded = expanded,
-                onExpandedChange = { expanded = it },
-                onDismissRequest = { expanded = false },
-                enabled = hayVehiculos,
-                placeholder = {
-                    Text(if (hayVehiculos) "Selecciona un vehículo" else "Sin vehículos previos")
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) { closeMenu ->
-                vehiculos.forEach { vehiculo ->
-                    DropdownMenuItem(
-                        text = { Text("${vehiculo.patente} • ${vehiculo.marca} ${vehiculo.modelo}") },
-                        onClick = {
-                            onSeleccionarVehiculo(vehiculo)
-                            closeMenu()
-                        }
-                    )
-                }
-                DropdownMenuItem(
-                    text = { Text("Registrar nuevo vehículo") },
-                    onClick = {
-                        onCrearNuevoVehiculo()
-                        closeMenu()
-                    }
-                )
-            }
-            if (!hayVehiculos) {
+            if (vehiculos.isEmpty()) {
                 Text("Registra un nuevo vehículo para este cliente", style = MaterialTheme.typography.bodySmall)
+            } else {
+                Text(
+                    "Vehículos registrados para este cliente",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    vehiculos.forEach { vehiculo ->
+                        val esSeleccionado = vehiculoSeleccionado == vehiculo.patente
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectable(
+                                    selected = esSeleccionado,
+                                    role = Role.RadioButton,
+                                    onClick = { onSeleccionarVehiculo(vehiculo) }
+                                )
+                                .padding(vertical = 4.dp)
+                        ) {
+                            RadioButton(
+                                selected = esSeleccionado,
+                                onClick = { onSeleccionarVehiculo(vehiculo) }
+                            )
+                            Column(modifier = Modifier.padding(start = 12.dp)) {
+                                Text("${vehiculo.patente} • ${vehiculo.marca} ${vehiculo.modelo}")
+                                Text(
+                                    text = listOfNotNull(
+                                        vehiculo.anio.toString(),
+                                        vehiculo.color,
+                                        vehiculo.kilometraje?.let { "${it} km" }
+                                    ).joinToString(" • "),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                }
+                TextButton(
+                    onClick = onCrearNuevoVehiculo,
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text("Registrar nuevo vehículo")
+                }
             }
             OutlinedTextField(
                 value = patente,
@@ -650,48 +663,38 @@ private fun MecanicosSection(
                 return@Column
             }
             val seleccionadosIds = seleccionados.map(Usuario::id).toSet()
-            val disponibles = mecanicos.filter { it.id !in seleccionadosIds }
-            var expanded by remember { mutableStateOf(false) }
-            DropdownTextField(
-                value = "",
-                label = "Seleccionar mecánico",
-                expanded = expanded,
-                onExpandedChange = { expanded = it },
-                onDismissRequest = { expanded = false },
-                enabled = disponibles.isNotEmpty(),
-                placeholder = {
-                    Text(if (disponibles.isEmpty()) "Sin opciones" else "Elige un mecánico")
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) { closeMenu ->
-                disponibles.forEach { mecanico ->
-                    DropdownMenuItem(
-                        text = { Text("${mecanico.nombre} • ${mecanico.email}") },
-                        onClick = {
-                            onSelect(mecanico)
-                            closeMenu()
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                mecanicos.forEach { mecanico ->
+                    val estaSeleccionado = mecanico.id in seleccionadosIds
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .toggleable(
+                                value = estaSeleccionado,
+                                role = Role.Checkbox,
+                                onValueChange = { marcado ->
+                                    if (marcado && !estaSeleccionado) {
+                                        onSelect(mecanico)
+                                    } else if (!marcado && estaSeleccionado) {
+                                        onRemove(mecanico)
+                                    }
+                                }
+                            )
+                    ) {
+                        Checkbox(
+                            checked = estaSeleccionado,
+                            onCheckedChange = null
+                        )
+                        Column(modifier = Modifier.padding(start = 12.dp)) {
+                            Text(mecanico.nombre, style = MaterialTheme.typography.bodyLarge)
+                            Text(mecanico.email, style = MaterialTheme.typography.bodySmall)
                         }
-                    )
+                    }
                 }
             }
             if (seleccionados.isEmpty()) {
                 Text("Selecciona al menos un mecánico", style = MaterialTheme.typography.bodySmall)
-            } else {
-                seleccionados.forEach { mecanico ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(mecanico.nombre, style = MaterialTheme.typography.bodyLarge)
-                            Text(mecanico.email, style = MaterialTheme.typography.bodySmall)
-                        }
-                        IconButton(onClick = { onRemove(mecanico) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Quitar mecánico")
-                        }
-                    }
-                }
             }
         }
     }
