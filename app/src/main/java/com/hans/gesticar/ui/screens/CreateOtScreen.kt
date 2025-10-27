@@ -15,13 +15,18 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenu
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.menuAnchor
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -38,6 +43,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.hans.gesticar.model.Cliente
@@ -47,13 +54,22 @@ import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
 import com.hans.gesticar.ui.Routes
 import com.hans.gesticar.viewmodel.MainViewModel
+import com.hans.gesticar.util.formatRutInput
+import com.hans.gesticar.util.isRutValid
+import com.hans.gesticar.util.normalizeRut
+import com.hans.gesticar.util.sanitizeRutInput
 
-private data class PresupuestoItemForm(
-    var tipo: ItemTipo = ItemTipo.MO,
-    var descripcion: String = "",
-    var cantidad: String = "1",
-    var precioUnitario: String = ""
-)
+private class PresupuestoItemForm(
+    tipo: ItemTipo = ItemTipo.MO,
+    descripcion: String = "",
+    cantidad: String = "1",
+    precioUnitario: String = ""
+) {
+    var tipo by mutableStateOf(tipo)
+    var descripcion by mutableStateOf(descripcion)
+    var cantidad by mutableStateOf(cantidad)
+    var precioUnitario by mutableStateOf(precioUnitario)
+}
 
 @Composable
 fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
@@ -63,7 +79,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
         vm.prepararNuevaOt()
     }
 
-    var rut by rememberSaveable { mutableStateOf("") }
+    var rutSanitized by rememberSaveable { mutableStateOf("") }
     var nombre by rememberSaveable { mutableStateOf("") }
     var correo by rememberSaveable { mutableStateOf("") }
     var direccion by rememberSaveable { mutableStateOf("") }
@@ -80,11 +96,12 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
 
     var presupuestoAprobado by rememberSaveable { mutableStateOf(false) }
     val items = remember { mutableStateListOf(PresupuestoItemForm()) }
-    var seleccionMecanicos by remember { mutableStateOf(setOf<String>()) }
+    val seleccionMecanicos = remember { mutableStateListOf<String>() }
+    var vehiculoSeleccionado by rememberSaveable { mutableStateOf<String?>(null) }
 
     LaunchedEffect(uiState.exito) {
         if (uiState.exito) {
-            rut = ""
+            rutSanitized = ""
             nombre = ""
             correo = ""
             direccion = ""
@@ -98,7 +115,8 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             combustible = ""
             sintomas = ""
             presupuestoAprobado = false
-            seleccionMecanicos = emptySet()
+            seleccionMecanicos.clear()
+            vehiculoSeleccionado = null
             items.clear()
             items += PresupuestoItemForm()
         }
@@ -106,7 +124,63 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
 
     LaunchedEffect(uiState.mecanicos) {
         val disponibles = uiState.mecanicos.map(Usuario::id).toSet()
-        seleccionMecanicos = seleccionMecanicos.filter { it in disponibles }.toSet()
+        seleccionMecanicos.removeAll { it !in disponibles }
+    }
+
+    val rutValido = isRutValid(rutSanitized)
+    val rutNormalizado = if (rutValido) normalizeRut(rutSanitized) else null
+
+    LaunchedEffect(rutNormalizado) {
+        rutNormalizado?.let { vm.buscarClientePorRut(it) }
+    }
+
+    LaunchedEffect(uiState.cliente?.rut, rutNormalizado) {
+        val cliente = uiState.cliente
+        if (cliente != null && rutNormalizado == normalizeRut(cliente.rut)) {
+            nombre = cliente.nombre
+            correo = cliente.correo.orEmpty()
+            direccion = cliente.direccion.orEmpty()
+            telefono = cliente.telefono.orEmpty()
+        } else if (rutNormalizado == null || cliente == null) {
+            nombre = ""
+            correo = ""
+            direccion = ""
+            telefono = ""
+        }
+    }
+
+    LaunchedEffect(uiState.vehiculosCliente, rutNormalizado) {
+        if (rutNormalizado == uiState.cliente?.rut) {
+            val actuales = uiState.vehiculosCliente.map(Vehiculo::patente).toSet()
+            if (vehiculoSeleccionado != null && vehiculoSeleccionado !in actuales) {
+                vehiculoSeleccionado = null
+            }
+            if (vehiculoSeleccionado == null && uiState.vehiculosCliente.isNotEmpty()) {
+                vehiculoSeleccionado = uiState.vehiculosCliente.first().patente
+            }
+        } else {
+            vehiculoSeleccionado = null
+            patente = ""
+            marca = ""
+            modelo = ""
+            anio = ""
+            color = ""
+            kilometraje = ""
+            combustible = ""
+        }
+    }
+
+    LaunchedEffect(vehiculoSeleccionado, uiState.vehiculosCliente) {
+        val vehiculo = uiState.vehiculosCliente.firstOrNull { it.patente == vehiculoSeleccionado }
+        if (vehiculo != null) {
+            patente = vehiculo.patente
+            marca = vehiculo.marca
+            modelo = vehiculo.modelo
+            anio = vehiculo.anio.toString()
+            color = vehiculo.color.orEmpty()
+            kilometraje = vehiculo.kilometraje?.toString().orEmpty()
+            combustible = vehiculo.combustible.orEmpty()
+        }
     }
 
     Column(
@@ -140,8 +214,10 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
         }
 
         ClienteSection(
-            rut = rut,
-            onRutChange = { rut = it.uppercase() },
+            rut = formatRutInput(rutSanitized),
+            onRutChange = { rutSanitized = sanitizeRutInput(it) },
+            rutValido = rutValido,
+            mostrarRutInvalido = rutSanitized.isNotBlank() && !rutValido,
             nombre = nombre,
             onNombreChange = { nombre = it },
             correo = correo,
@@ -149,7 +225,22 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             direccion = direccion,
             onDireccionChange = { direccion = it },
             telefono = telefono,
-            onTelefonoChange = { telefono = it }
+            onTelefonoChange = { telefono = it },
+            onGuardarCliente = {
+                if (rutNormalizado != null && nombre.isNotBlank()) {
+                    vm.guardarCliente(
+                        Cliente(
+                            rut = rutNormalizado,
+                            nombre = nombre,
+                            correo = correo.takeIf { it.isNotBlank() },
+                            direccion = direccion.takeIf { it.isNotBlank() },
+                            telefono = telefono.takeIf { it.isNotBlank() }
+                        )
+                    )
+                }
+            },
+            guardandoCliente = uiState.guardandoCliente,
+            mensajeCliente = uiState.mensajeCliente
         )
 
         VehiculoSection(
@@ -160,7 +251,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             modelo = modelo,
             onModeloChange = { modelo = it },
             anio = anio,
-            onAnioChange = { anio = it.filter { ch -> ch.isDigit() } },
+            onAnioChange = { anio = it.filter { ch -> ch.isDigit() }.take(4) },
             color = color,
             onColorChange = { color = it },
             kilometraje = kilometraje,
@@ -168,19 +259,52 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             combustible = combustible,
             onCombustibleChange = { combustible = it },
             sintomas = sintomas,
-            onSintomasChange = { sintomas = it }
+            onSintomasChange = { sintomas = it },
+            vehiculos = if (rutNormalizado == uiState.cliente?.rut) uiState.vehiculosCliente else emptyList(),
+            vehiculoSeleccionado = vehiculoSeleccionado,
+            onSeleccionarVehiculo = { vehiculo -> vehiculoSeleccionado = vehiculo?.patente },
+            onCrearNuevoVehiculo = {
+                vehiculoSeleccionado = null
+                patente = ""
+                marca = ""
+                modelo = ""
+                anio = ""
+                color = ""
+                kilometraje = ""
+                combustible = ""
+            },
+            onGuardarVehiculo = {
+                val anioInt = anio.toIntOrNull()
+                if (rutNormalizado != null && patente.isNotBlank() && marca.isNotBlank() && modelo.isNotBlank() && anioInt != null) {
+                    val kmInt = kilometraje.toIntOrNull()
+                    vm.guardarVehiculo(
+                        Vehiculo(
+                            patente = patente.uppercase(),
+                            clienteRut = rutNormalizado,
+                            marca = marca,
+                            modelo = modelo,
+                            anio = anioInt,
+                            color = color.takeIf { it.isNotBlank() },
+                            kilometraje = kmInt,
+                            combustible = combustible.takeIf { it.isNotBlank() }
+                        )
+                    )
+                    vehiculoSeleccionado = patente.uppercase()
+                }
+            },
+            guardandoVehiculo = uiState.guardandoVehiculo,
+            mensajeVehiculo = uiState.mensajeVehiculo
         )
 
         MecanicosSection(
             mecanicos = uiState.mecanicos,
-            seleccionados = seleccionMecanicos,
-            onToggle = { id ->
-                seleccionMecanicos = if (id in seleccionMecanicos) {
-                    seleccionMecanicos - id
-                } else {
-                    seleccionMecanicos + id
+            seleccionados = uiState.mecanicos.filter { it.id in seleccionMecanicos },
+            onSelect = { mecanico ->
+                if (mecanico.id !in seleccionMecanicos) {
+                    seleccionMecanicos += mecanico.id
                 }
-            }
+            },
+            onRemove = { mecanico -> seleccionMecanicos.remove(mecanico.id) }
         )
 
         PresupuestoSection(
@@ -191,8 +315,8 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
 
         val anioInt = anio.toIntOrNull()
         val kmInt = kilometraje.toIntOrNull()
-        val clienteValido = rut.isNotBlank() && nombre.isNotBlank()
-        val vehiculoValido = patente.isNotBlank() && marca.isNotBlank() && modelo.isNotBlank() && anioInt != null
+        val clienteValido = rutNormalizado != null && nombre.isNotBlank()
+        val vehiculoValido = patente.isNotBlank() && marca.isNotBlank() && modelo.isNotBlank() && anioInt != null && anio.length == 4
         val presupuestoItemsValidos = items.mapNotNull { form ->
             val cantidadInt = form.cantidad.toIntOrNull()
             val precioInt = form.precioUnitario.toIntOrNull()
@@ -214,16 +338,17 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             Button(
                 onClick = {
                     if (!puedeGuardar) return@Button
+                    val rutCliente = rutNormalizado ?: return@Button
                     val cliente = Cliente(
-                        rut = rut,
+                        rut = rutCliente,
                         nombre = nombre,
                         correo = correo.takeIf { it.isNotBlank() },
                         direccion = direccion.takeIf { it.isNotBlank() },
                         telefono = telefono.takeIf { it.isNotBlank() }
                     )
                     val vehiculo = Vehiculo(
-                        patente = patente,
-                        clienteRut = rut,
+                        patente = patente.uppercase(),
+                        clienteRut = rutCliente,
                         marca = marca,
                         modelo = modelo,
                         anio = anioInt ?: 0,
@@ -249,16 +374,17 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             Button(
                 onClick = {
                     if (!puedeIniciar) return@Button
+                    val rutCliente = rutNormalizado ?: return@Button
                     val cliente = Cliente(
-                        rut = rut,
+                        rut = rutCliente,
                         nombre = nombre,
                         correo = correo.takeIf { it.isNotBlank() },
                         direccion = direccion.takeIf { it.isNotBlank() },
                         telefono = telefono.takeIf { it.isNotBlank() }
                     )
                     val vehiculo = Vehiculo(
-                        patente = patente,
-                        clienteRut = rut,
+                        patente = patente.uppercase(),
+                        clienteRut = rutCliente,
                         marca = marca,
                         modelo = modelo,
                         anio = anioInt ?: 0,
@@ -298,6 +424,8 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
 private fun ClienteSection(
     rut: String,
     onRutChange: (String) -> Unit,
+    rutValido: Boolean,
+    mostrarRutInvalido: Boolean,
     nombre: String,
     onNombreChange: (String) -> Unit,
     correo: String,
@@ -305,7 +433,10 @@ private fun ClienteSection(
     direccion: String,
     onDireccionChange: (String) -> Unit,
     telefono: String,
-    onTelefonoChange: (String) -> Unit
+    onTelefonoChange: (String) -> Unit,
+    onGuardarCliente: () -> Unit,
+    guardandoCliente: Boolean,
+    mensajeCliente: String?
 ) {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -314,7 +445,21 @@ private fun ClienteSection(
                 value = rut,
                 onValueChange = onRutChange,
                 label = { Text("RUT") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                isError = mostrarRutInvalido,
+                supportingText = {
+                    when {
+                        guardandoCliente -> Text("Guardando cliente...")
+                        mostrarRutInvalido -> Text("Ingresa un RUT válido con dígito verificador")
+                        mensajeCliente != null -> {
+                            val esError = mensajeCliente.contains("error", ignoreCase = true)
+                            Text(
+                                mensajeCliente,
+                                color = if (esError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
             )
             OutlinedTextField(
                 value = nombre,
@@ -340,11 +485,19 @@ private fun ClienteSection(
                 label = { Text("Teléfono") },
                 modifier = Modifier.fillMaxWidth()
             )
+            Button(
+                onClick = onGuardarCliente,
+                enabled = rutValido && nombre.isNotBlank() && !guardandoCliente,
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text("Guardar cliente")
+            }
         }
     }
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun VehiculoSection(
     patente: String,
     onPatenteChange: (String) -> Unit,
@@ -361,11 +514,64 @@ private fun VehiculoSection(
     combustible: String,
     onCombustibleChange: (String) -> Unit,
     sintomas: String,
-    onSintomasChange: (String) -> Unit
+    onSintomasChange: (String) -> Unit,
+    vehiculos: List<Vehiculo>,
+    vehiculoSeleccionado: String?,
+    onSeleccionarVehiculo: (Vehiculo?) -> Unit,
+    onCrearNuevoVehiculo: () -> Unit,
+    onGuardarVehiculo: () -> Unit,
+    guardandoVehiculo: Boolean,
+    mensajeVehiculo: String?
 ) {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Datos del vehículo", style = MaterialTheme.typography.titleMedium)
+            val hayVehiculos = vehiculos.isNotEmpty()
+            var expanded by remember { mutableStateOf(false) }
+            val descripcionSeleccionado = vehiculos.firstOrNull { it.patente == vehiculoSeleccionado }
+                ?.let { "${it.patente} • ${it.marca} ${it.modelo}" }
+                ?: vehiculoSeleccionado.orEmpty()
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = !expanded }
+            ) {
+                OutlinedTextField(
+                    value = descripcionSeleccionado,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Vehículos registrados") },
+                    placeholder = { Text(if (hayVehiculos) "Selecciona un vehículo" else "Sin vehículos previos") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth(),
+                    enabled = hayVehiculos
+                )
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    vehiculos.forEach { vehiculo ->
+                        DropdownMenuItem(
+                            text = { Text("${vehiculo.patente} • ${vehiculo.marca} ${vehiculo.modelo}") },
+                            onClick = {
+                                onSeleccionarVehiculo(vehiculo)
+                                expanded = false
+                            }
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text("Registrar nuevo vehículo") },
+                        onClick = {
+                            onCrearNuevoVehiculo()
+                            expanded = false
+                        }
+                    )
+                }
+            }
+            if (!hayVehiculos) {
+                Text("Registra un nuevo vehículo para este cliente", style = MaterialTheme.typography.bodySmall)
+            }
             OutlinedTextField(
                 value = patente,
                 onValueChange = onPatenteChange,
@@ -391,7 +597,8 @@ private fun VehiculoSection(
                     value = anio,
                     onValueChange = onAnioChange,
                     label = { Text("Año") },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
                 OutlinedTextField(
                     value = color,
@@ -405,7 +612,8 @@ private fun VehiculoSection(
                     value = kilometraje,
                     onValueChange = onKilometrajeChange,
                     label = { Text("Kilometraje") },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
                 OutlinedTextField(
                     value = combustible,
@@ -420,34 +628,91 @@ private fun VehiculoSection(
                 label = { Text("Síntomas entregados por el cliente") },
                 modifier = Modifier.fillMaxWidth()
             )
+            if (guardandoVehiculo) {
+                Text("Guardando vehículo...", style = MaterialTheme.typography.bodySmall)
+            } else if (mensajeVehiculo != null) {
+                val esError = mensajeVehiculo.contains("error", ignoreCase = true)
+                Text(
+                    mensajeVehiculo,
+                    color = if (esError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Button(
+                onClick = onGuardarVehiculo,
+                enabled = patente.isNotBlank() && marca.isNotBlank() && modelo.isNotBlank() && anio.length == 4 && !guardandoVehiculo,
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text("Guardar vehículo")
+            }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MecanicosSection(
     mecanicos: List<Usuario>,
-    seleccionados: Set<String>,
-    onToggle: (String) -> Unit
+    seleccionados: List<Usuario>,
+    onSelect: (Usuario) -> Unit,
+    onRemove: (Usuario) -> Unit
 ) {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Mecánicos asignados", style = MaterialTheme.typography.titleMedium)
             if (mecanicos.isEmpty()) {
                 Text("No hay mecánicos registrados", style = MaterialTheme.typography.bodyMedium)
+                return@Column
+            }
+            val seleccionadosIds = seleccionados.map(Usuario::id).toSet()
+            val disponibles = mecanicos.filter { it.id !in seleccionadosIds }
+            var expanded by remember { mutableStateOf(false) }
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = !expanded }
+            ) {
+                OutlinedTextField(
+                    value = "",
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Seleccionar mecánico") },
+                    placeholder = { Text(if (disponibles.isEmpty()) "Sin opciones" else "Elige un mecánico") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                    enabled = disponibles.isNotEmpty(),
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth()
+                )
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    disponibles.forEach { mecanico ->
+                        DropdownMenuItem(
+                            text = { Text("${mecanico.nombre} • ${mecanico.email}") },
+                            onClick = {
+                                onSelect(mecanico)
+                                expanded = false
+                            }
+                        )
+                    }
+                }
+            }
+            if (seleccionados.isEmpty()) {
+                Text("Selecciona al menos un mecánico", style = MaterialTheme.typography.bodySmall)
             } else {
-                mecanicos.forEach { mecanico ->
+                seleccionados.forEach { mecanico ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Checkbox(
-                            checked = mecanico.id in seleccionados,
-                            onCheckedChange = { onToggle(mecanico.id) }
-                        )
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(mecanico.nombre, style = MaterialTheme.typography.bodyLarge)
                             Text(mecanico.email, style = MaterialTheme.typography.bodySmall)
+                        }
+                        IconButton(onClick = { onRemove(mecanico) }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Quitar mecánico")
                         }
                     }
                 }
@@ -527,13 +792,15 @@ private fun PresupuestoItemRow(
                 value = item.cantidad,
                 onValueChange = { item.cantidad = it.filter { ch -> ch.isDigit() } },
                 label = { Text("Cantidad") },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
             OutlinedTextField(
                 value = item.precioUnitario,
                 onValueChange = { item.precioUnitario = it.filter { ch -> ch.isDigit() } },
                 label = { Text("Precio unitario") },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
         }
     }

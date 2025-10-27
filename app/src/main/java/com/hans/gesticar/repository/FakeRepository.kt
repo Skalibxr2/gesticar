@@ -12,6 +12,7 @@ import com.hans.gesticar.model.PresupuestoItem
 import com.hans.gesticar.model.Rol
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
+import com.hans.gesticar.util.normalizeRut
 import java.util.concurrent.atomic.AtomicInteger
 
 class FakeRepository : Repository {
@@ -29,6 +30,12 @@ class FakeRepository : Repository {
             email = "mecanico@gesticar.cl",
             password = "mecanico",
             rol = Rol.MECANICO
+        ),
+        Usuario(
+            nombre = "Mecánica Ana",
+            email = "ana@gesticar.cl",
+            password = "mecanico",
+            rol = Rol.MECANICO
         )
     )
     val clientes = mutableListOf<Cliente>()
@@ -40,10 +47,10 @@ class FakeRepository : Repository {
 
     init {
         // Seed mínimo
-        val c = Cliente(rut = "12.345.678-9", nombre = "Juan Pérez", correo = "juan@example.com")
-        clientes += c
-        val v = Vehiculo(
-            clienteRut = c.rut,
+        val clienteUno = Cliente(rut = normalizeRut("12345678-9"), nombre = "Juan Pérez", correo = "juan@example.com")
+        clientes += clienteUno
+        val vehiculoUno = Vehiculo(
+            clienteRut = clienteUno.rut,
             patente = "ABCD12",
             marca = "Toyota",
             modelo = "Yaris",
@@ -52,12 +59,27 @@ class FakeRepository : Repository {
             kilometraje = 75000,
             combustible = "Gasolina"
         )
-        vehiculos += v
-        val mecanico = usuarios.first { it.rol == Rol.MECANICO }
+        vehiculos += vehiculoUno
+
+        val clienteDos = Cliente(rut = normalizeRut("20123456-K"), nombre = "María González", correo = "maria@example.com")
+        clientes += clienteDos
+        val vehiculoDos = Vehiculo(
+            clienteRut = clienteDos.rut,
+            patente = "EFGH34",
+            marca = "Hyundai",
+            modelo = "Accent",
+            anio = 2020,
+            color = "Azul",
+            kilometraje = 40000,
+            combustible = "Gasolina"
+        )
+        vehiculos += vehiculoDos
+
+        val mecanicos = usuarios.filter { it.rol == Rol.MECANICO }
         val ot = crearOtInternal(
-            vehiculoPatente = v.patente,
+            vehiculoPatente = vehiculoUno.patente,
             notas = "Ruidos en tren delantero",
-            mecanicos = listOf(mecanico.id)
+            mecanicos = mecanicos.take(1).map(Usuario::id)
         )
         agregarItemPresupuesto(ot.id, ItemTipo.MO, "Diagnóstico", 1, 15000)
         agregarItemPresupuesto(ot.id, ItemTipo.REP, "Bujías", 4, 8000)
@@ -105,15 +127,16 @@ class FakeRepository : Repository {
         presupuestoAprobado: Boolean,
         sintomas: String?
     ): Ot {
-        val rutUpper = cliente.rut.uppercase()
-        clientes.removeAll { it.rut.equals(rutUpper, ignoreCase = true) }
-        clientes += cliente.copy(rut = rutUpper)
+        guardarCliente(cliente)
 
-        val patenteUpper = vehiculo.patente.uppercase()
-        vehiculos.removeAll { it.patente.equals(patenteUpper, ignoreCase = true) }
-        vehiculos += vehiculo.copy(patente = patenteUpper, clienteRut = rutUpper)
+        val rutNormalizado = normalizeRut(cliente.rut)
+        val vehiculoNormalizado = vehiculo.copy(
+            patente = vehiculo.patente.uppercase(),
+            clienteRut = rutNormalizado
+        )
+        guardarVehiculo(vehiculoNormalizado)
 
-        val ot = crearOtInternal(patenteUpper, sintomas, mecanicosIds)
+        val ot = crearOtInternal(vehiculoNormalizado.patente, sintomas, mecanicosIds)
 
         val presupuesto = presupuestos.getValue(ot.id)
         presupuesto.items.clear()
@@ -123,6 +146,28 @@ class FakeRepository : Repository {
             log(ot.id, "PRESUPUESTO_APROBADO")
         }
         return ot
+    }
+
+    override suspend fun buscarClientePorRut(rut: String): Cliente? {
+        val rutNormalizado = normalizeRut(rut)
+        return clientes.firstOrNull { normalizeRut(it.rut) == rutNormalizado }
+    }
+
+    override suspend fun guardarCliente(cliente: Cliente) {
+        val rutNormalizado = normalizeRut(cliente.rut)
+        clientes.removeAll { normalizeRut(it.rut) == rutNormalizado }
+        clientes += cliente.copy(rut = rutNormalizado)
+    }
+
+    override suspend fun obtenerVehiculosPorRut(rut: String): List<Vehiculo> {
+        val rutNormalizado = normalizeRut(rut)
+        return vehiculos.filter { normalizeRut(it.clienteRut) == rutNormalizado }
+    }
+
+    override suspend fun guardarVehiculo(vehiculo: Vehiculo) {
+        val patenteUpper = vehiculo.patente.uppercase()
+        vehiculos.removeAll { it.patente.equals(patenteUpper, ignoreCase = true) }
+        vehiculos += vehiculo.copy(patente = patenteUpper, clienteRut = normalizeRut(vehiculo.clienteRut))
     }
 
     fun obtenerPresupuesto(otId: String): Presupuesto = presupuestos.getValue(otId)

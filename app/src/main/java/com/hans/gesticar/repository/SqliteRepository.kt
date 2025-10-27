@@ -13,6 +13,7 @@ import com.hans.gesticar.model.PresupuestoItem
 import com.hans.gesticar.model.Rol
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
+import com.hans.gesticar.util.normalizeRut
 import java.util.UUID
 
 private const val DB_NAME = "gesticar.db"
@@ -155,41 +156,80 @@ class SqliteRepository(context: Context) : Repository {
                     }
                 )
 
-                val mechanicId = UUID.randomUUID().toString()
+                val mechanicOneId = UUID.randomUUID().toString()
                 db.insertOrThrow(
                     "usuarios",
                     null,
                     ContentValues().apply {
-                        put("id", mechanicId)
+                        put("id", mechanicOneId)
                         put("nombre", "Mecánico Juan")
                         put("email", "mecanico@gesticar.cl")
                         put("rol", Rol.MECANICO.name)
                     }
                 )
 
-                val clienteRut = "12.345.678-9"
+                val mechanicTwoId = UUID.randomUUID().toString()
+                db.insertOrThrow(
+                    "usuarios",
+                    null,
+                    ContentValues().apply {
+                        put("id", mechanicTwoId)
+                        put("nombre", "Mecánica Ana")
+                        put("email", "ana@gesticar.cl")
+                        put("rol", Rol.MECANICO.name)
+                    }
+                )
+
+                val clienteUnoRut = normalizeRut("12345678-9")
                 db.insertOrThrow(
                     "clientes",
                     null,
                     ContentValues().apply {
-                        put("rut", clienteRut)
+                        put("rut", clienteUnoRut)
                         put("nombre", "Juan Pérez")
                         put("correo", "juan@example.com")
                     }
                 )
 
-                val patente = "ABCD12"
+                val patenteUno = "ABCD12"
                 db.insertOrThrow(
                     "vehiculos",
                     null,
                     ContentValues().apply {
-                        put("patente", patente)
-                        put("cliente_rut", clienteRut)
+                        put("patente", patenteUno)
+                        put("cliente_rut", clienteUnoRut)
                         put("marca", "Toyota")
                         put("modelo", "Yaris")
                         put("anio", 2018)
                         put("color", "Rojo")
                         put("kilometraje", 75000)
+                        put("combustible", "Gasolina")
+                    }
+                )
+
+                val clienteDosRut = normalizeRut("20123456-K")
+                db.insertOrThrow(
+                    "clientes",
+                    null,
+                    ContentValues().apply {
+                        put("rut", clienteDosRut)
+                        put("nombre", "María González")
+                        put("correo", "maria@example.com")
+                    }
+                )
+
+                val patenteDos = "EFGH34"
+                db.insertOrThrow(
+                    "vehiculos",
+                    null,
+                    ContentValues().apply {
+                        put("patente", patenteDos)
+                        put("cliente_rut", clienteDosRut)
+                        put("marca", "Hyundai")
+                        put("modelo", "Accent")
+                        put("anio", 2020)
+                        put("color", "Azul")
+                        put("kilometraje", 40000)
                         put("combustible", "Gasolina")
                     }
                 )
@@ -202,7 +242,7 @@ class SqliteRepository(context: Context) : Repository {
                     ContentValues().apply {
                         put("id", otId)
                         put("numero", 1000)
-                        put("vehiculo_patente", patente)
+                        put("vehiculo_patente", patenteUno)
                         put("estado", OtState.BORRADOR.name)
                         put("notas", "Ruidos en tren delantero")
                         put("creada_en", createdAt)
@@ -224,7 +264,7 @@ class SqliteRepository(context: Context) : Repository {
                     null,
                     ContentValues().apply {
                         put("ot_id", otId)
-                        put("mecanico_id", mechanicId)
+                        put("mecanico_id", mechanicOneId)
                     }
                 )
 
@@ -358,6 +398,78 @@ class SqliteRepository(context: Context) : Repository {
         }
     }
 
+    override suspend fun buscarClientePorRut(rut: String): Cliente? {
+        val rutNormalizado = normalizeRut(rut)
+        val cursor = helper.readableDatabase.rawQuery(
+            "SELECT rut, nombre, correo, direccion, telefono FROM clientes WHERE rut = ?",
+            arrayOf(rutNormalizado)
+        )
+        cursor.use {
+            return if (it.moveToFirst()) {
+                Cliente(
+                    rut = it.getString(0),
+                    nombre = it.getString(1),
+                    correo = it.getString(2),
+                    direccion = it.getString(3),
+                    telefono = it.getString(4)
+                )
+            } else {
+                null
+            }
+        }
+    }
+
+    override suspend fun guardarCliente(cliente: Cliente) {
+        val db = helper.writableDatabase
+        db.beginTransaction()
+        try {
+            upsertCliente(db, cliente)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override suspend fun obtenerVehiculosPorRut(rut: String): List<Vehiculo> {
+        val rutNormalizado = normalizeRut(rut)
+        val cursor = helper.readableDatabase.rawQuery(
+            """
+            SELECT patente, cliente_rut, marca, modelo, anio, color, kilometraje, combustible
+            FROM vehiculos
+            WHERE cliente_rut = ?
+            ORDER BY patente
+            """.trimIndent(),
+            arrayOf(rutNormalizado)
+        )
+        cursor.use {
+            val list = ArrayList<Vehiculo>(it.count.coerceAtLeast(0))
+            while (it.moveToNext()) {
+                list += Vehiculo(
+                    patente = it.getString(0),
+                    clienteRut = it.getString(1),
+                    marca = it.getString(2),
+                    modelo = it.getString(3),
+                    anio = it.getInt(4),
+                    color = it.getString(5),
+                    kilometraje = if (it.isNull(6)) null else it.getInt(6),
+                    combustible = it.getString(7)
+                )
+            }
+            return list
+        }
+    }
+
+    override suspend fun guardarVehiculo(vehiculo: Vehiculo) {
+        val db = helper.writableDatabase
+        db.beginTransaction()
+        try {
+            upsertVehiculo(db, vehiculo)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     override suspend fun crearOt(
         cliente: Cliente,
         vehiculo: Vehiculo,
@@ -369,36 +481,16 @@ class SqliteRepository(context: Context) : Repository {
         val db = helper.writableDatabase
         db.beginTransaction()
         try {
-            val rut = cliente.rut.uppercase()
+            val rut = normalizeRut(cliente.rut)
             val patente = vehiculo.patente.uppercase()
 
-            db.insertWithOnConflict(
-                "clientes",
-                null,
-                ContentValues().apply {
-                    put("rut", rut)
-                    put("nombre", cliente.nombre)
-                    put("correo", cliente.correo)
-                    put("direccion", cliente.direccion)
-                    put("telefono", cliente.telefono)
-                },
-                SQLiteDatabase.CONFLICT_REPLACE
-            )
-
-            db.insertWithOnConflict(
-                "vehiculos",
-                null,
-                ContentValues().apply {
-                    put("patente", patente)
-                    put("cliente_rut", rut)
-                    put("marca", vehiculo.marca)
-                    put("modelo", vehiculo.modelo)
-                    put("anio", vehiculo.anio)
-                    put("color", vehiculo.color)
-                    put("kilometraje", vehiculo.kilometraje)
-                    put("combustible", vehiculo.combustible)
-                },
-                SQLiteDatabase.CONFLICT_REPLACE
+            upsertCliente(db, cliente.copy(rut = rut))
+            upsertVehiculo(
+                db,
+                vehiculo.copy(
+                    patente = patente,
+                    clienteRut = rut
+                )
             )
 
             val numero = calcularSiguienteNumero(db)
@@ -574,6 +666,42 @@ class SqliteRepository(context: Context) : Repository {
         cursor.use {
             return if (it.moveToFirst()) it.getInt(0) else 1000
         }
+    }
+
+    private fun upsertCliente(db: SQLiteDatabase, cliente: Cliente) {
+        val rutNormalizado = normalizeRut(cliente.rut)
+        db.insertWithOnConflict(
+            "clientes",
+            null,
+            ContentValues().apply {
+                put("rut", rutNormalizado)
+                put("nombre", cliente.nombre)
+                put("correo", cliente.correo)
+                put("direccion", cliente.direccion)
+                put("telefono", cliente.telefono)
+            },
+            SQLiteDatabase.CONFLICT_REPLACE
+        )
+    }
+
+    private fun upsertVehiculo(db: SQLiteDatabase, vehiculo: Vehiculo) {
+        val patenteUpper = vehiculo.patente.uppercase()
+        val rutNormalizado = normalizeRut(vehiculo.clienteRut)
+        db.insertWithOnConflict(
+            "vehiculos",
+            null,
+            ContentValues().apply {
+                put("patente", patenteUpper)
+                put("cliente_rut", rutNormalizado)
+                put("marca", vehiculo.marca)
+                put("modelo", vehiculo.modelo)
+                put("anio", vehiculo.anio)
+                put("color", vehiculo.color)
+                put("kilometraje", vehiculo.kilometraje)
+                put("combustible", vehiculo.combustible)
+            },
+            SQLiteDatabase.CONFLICT_REPLACE
+        )
     }
 
     private fun insertAudit(db: SQLiteDatabase, otId: String, accion: String) {
