@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -71,6 +70,12 @@ fun SearchOtScreen(vm: MainViewModel) {
     var rutTexto by rememberSaveable { mutableStateOf("") }
     var estadoExpanded by remember { mutableStateOf(false) }
     var estadoSeleccionado by remember { mutableStateOf<OtState?>(null) }
+    var filtrosVisibles by rememberSaveable { mutableStateOf(true) }
+
+    // Al seleccionar una OT mostramos solo el detalle para aprovechar la pantalla completa.
+    LaunchedEffect(ui.detalleSeleccionado?.ot?.id) {
+        filtrosVisibles = ui.detalleSeleccionado == null
+    }
 
     Column(
         Modifier
@@ -85,65 +90,84 @@ fun SearchOtScreen(vm: MainViewModel) {
             else -> Text("Inicia sesión para realizar búsquedas.")
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = nroTexto,
-                onValueChange = { nroTexto = it.filter(Char::isDigit) },
-                label = { Text("N° OT") },
-                modifier = Modifier.weight(1f)
-            )
-            Button(onClick = {
-                val numero = nroTexto.toIntOrNull()
-                if (numero != null) {
-                    vm.buscarPorNumero(numero)
-                }
-            }) { Text("Buscar N°") }
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = patente,
-                onValueChange = { patente = it.uppercase() },
-                label = { Text("Patente") },
-                modifier = Modifier.weight(1f)
-            )
-            Button(onClick = { if (patente.isNotBlank()) vm.buscarPorPatente(patente) }) {
-                Text("Buscar Patente")
-            }
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = rutTexto,
-                onValueChange = { rutTexto = formatRutInput(it) },
-                label = { Text("RUT Cliente") },
-                modifier = Modifier.weight(1f)
-            )
-            Button(onClick = {
-                if (rutTexto.isNotBlank()) {
-                    vm.buscarPorRut(normalizeRut(rutTexto))
-                }
-            }) { Text("Buscar RUT") }
-        }
-
-        DropdownTextField(
-            value = estadoSeleccionado?.name.orEmpty(),
-            label = "Estado OT",
-            expanded = estadoExpanded,
-            onExpandedChange = { estadoExpanded = it },
-            onDismissRequest = { estadoExpanded = false },
-            placeholder = { Text("Buscar por estado") },
-            modifier = Modifier.fillMaxWidth()
-        ) { closeMenu ->
-            OtState.values().forEach { estado ->
-                DropdownMenuItem(
-                    text = { Text(estado.name) },
-                    onClick = {
-                        estadoSeleccionado = estado
-                        closeMenu()
-                        vm.buscarPorEstado(estado)
-                    }
+        if (filtrosVisibles) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = nroTexto,
+                    onValueChange = { nroTexto = it.filter(Char::isDigit) },
+                    label = { Text("N° OT") },
+                    modifier = Modifier.weight(1f)
                 )
+                Button(onClick = {
+                    val numero = nroTexto.toIntOrNull()
+                    if (numero != null) {
+                        vm.buscarPorNumero(numero)
+                    }
+                }) { Text("Buscar N°") }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = patente,
+                    onValueChange = { patente = it.uppercase() },
+                    label = { Text("Patente") },
+                    modifier = Modifier.weight(1f)
+                )
+                Button(onClick = { if (patente.isNotBlank()) vm.buscarPorPatente(patente) }) {
+                    Text("Buscar Patente")
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = rutTexto,
+                    onValueChange = { rutTexto = formatRutInput(it) },
+                    label = { Text("RUT Cliente") },
+                    modifier = Modifier.weight(1f)
+                )
+                Button(onClick = {
+                    if (rutTexto.isNotBlank()) {
+                        vm.buscarPorRut(normalizeRut(rutTexto))
+                    }
+                }) { Text("Buscar RUT") }
+            }
+
+            // Se despliega correctamente la lista de estados para filtrar por estado de la OT.
+            DropdownTextField(
+                value = estadoSeleccionado?.toReadableName().orEmpty(),
+                label = "Estado OT",
+                expanded = estadoExpanded,
+                onExpandedChange = { estadoExpanded = it },
+                onDismissRequest = { estadoExpanded = false },
+                placeholder = { Text("Buscar por estado") },
+                modifier = Modifier.fillMaxWidth()
+            ) { closeMenu ->
+                val estados = OtState.values()
+                estados.forEach { estado ->
+                    DropdownMenuItem(
+                        text = { Text(estado.toReadableName()) },
+                        onClick = {
+                            estadoSeleccionado = estado
+                            closeMenu()
+                            vm.buscarPorEstado(estado)
+                        }
+                    )
+                }
+                if (estados.isEmpty()) {
+                    DropdownMenuItem(
+                        text = { Text("Sin estados disponibles") },
+                        onClick = {},
+                        enabled = false
+                    )
+                }
+            }
+
+            TextButton(onClick = { filtrosVisibles = false }) {
+                Text("Ocultar filtros")
+            }
+        } else {
+            TextButton(onClick = { filtrosVisibles = true }) {
+                Text("Mostrar filtros de búsqueda")
             }
         }
 
@@ -183,7 +207,10 @@ fun SearchOtScreen(vm: MainViewModel) {
                 onGuardarTareas = { tareas -> vm.guardarTareas(detalle.ot.id, tareas) },
                 onIniciar = { vm.iniciarOt(detalle.ot.id) },
                 onFinalizar = { vm.finalizarOt(detalle.ot.id) },
-                onCerrar = { vm.limpiarSeleccion() }
+                onCerrar = {
+                    filtrosVisibles = true
+                    vm.limpiarSeleccion()
+                }
             )
         }
     }
@@ -203,7 +230,7 @@ private fun OtCard(ot: Ot, seleccionado: Boolean, onClick: () -> Unit) {
             }
             Text("OT #${ot.numero}", style = MaterialTheme.typography.titleMedium)
             Text("Creada el: $fechaFormateada", style = MaterialTheme.typography.bodySmall)
-            Text("Estado: ${ot.estado}")
+            Text("Estado: ${ot.estado.toReadableName()}")
             if (seleccionado) {
                 Text("Seleccionada", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
             }
@@ -251,6 +278,7 @@ private fun OtDetailPanel(
     var notas by remember { mutableStateOf(detalle.ot.notas.orEmpty()) }
     var patente by remember { mutableStateOf(detalle.vehiculo?.patente ?: detalle.ot.vehiculoPatente) }
     val mecanicosSeleccionados = remember { mutableStateListOf<String>() }
+    var selectorMecanicosExpandido by remember { mutableStateOf(false) }
     var presupuestoAprobado by remember { mutableStateOf(detalle.presupuesto.aprobado) }
     var ivaTexto by remember { mutableStateOf(detalle.presupuesto.ivaPorc.toString()) }
     val items = remember { mutableStateListOf<PresupuestoItemFormState>() }
@@ -262,6 +290,7 @@ private fun OtDetailPanel(
         patente = detalle.vehiculo?.patente ?: detalle.ot.vehiculoPatente
         mecanicosSeleccionados.clear()
         mecanicosSeleccionados.addAll(detalle.ot.mecanicosAsignados)
+        selectorMecanicosExpandido = false
         presupuestoAprobado = detalle.presupuesto.aprobado
         ivaTexto = detalle.presupuesto.ivaPorc.toString()
         items.clear()
@@ -295,6 +324,8 @@ private fun OtDetailPanel(
         OtState.EN_EJECUCION, OtState.FINALIZADA -> false
         else -> true
     }
+    // Una OT finalizada queda solo para consulta; bloqueamos todas las acciones.
+    val soloLectura = detalle.ot.estado == OtState.FINALIZADA
     val puedeIniciar = detalle.ot.estado !in listOf(OtState.EN_EJECUCION, OtState.FINALIZADA) &&
         detalle.presupuesto.aprobado && detalle.presupuesto.items.isNotEmpty() &&
         detalle.cliente != null && detalle.vehiculo != null && detalle.ot.mecanicosAsignados.isNotEmpty()
@@ -317,7 +348,7 @@ private fun OtDetailPanel(
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = onCerrar) { Text("Cerrar") }
             }
-            Text("Estado actual: ${detalle.ot.estado}")
+            Text("Estado actual: ${detalle.ot.estado.toReadableName()}")
             detalle.cliente?.let { cliente ->
                 Text("Cliente: ${cliente.nombre} (${cliente.rut})", style = MaterialTheme.typography.bodyMedium)
             } ?: Text("Cliente: no registrado", color = MaterialTheme.colorScheme.error)
@@ -331,7 +362,7 @@ private fun OtDetailPanel(
                     value = patente,
                     onValueChange = { patente = it.uppercase() },
                     label = { Text("Patente asociada") },
-                    enabled = vehiculoEditable,
+                    enabled = vehiculoEditable && !soloLectura,
                     modifier = Modifier.fillMaxWidth(),
                     supportingText = {
                         if (!vehiculoEditable) {
@@ -343,33 +374,70 @@ private fun OtDetailPanel(
                     value = notas,
                     onValueChange = { notas = it },
                     label = { Text("Notas / Síntomas") },
+                    enabled = !soloLectura,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Mecánicos asignados", style = MaterialTheme.typography.labelLarge)
-                    mecanicos.forEach { mecanico ->
-                        val checked = mecanico.id in mecanicosSeleccionados
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = checked,
-                                onCheckedChange = { marcado ->
-                                    if (marcado) {
-                                        if (mecanico.id !in mecanicosSeleccionados) mecanicosSeleccionados += mecanico.id
-                                    } else {
-                                        mecanicosSeleccionados.remove(mecanico.id)
-                                    }
-                                }
+                    // Usamos el mismo patrón que en la creación de OT: menú para agregar y lista editable.
+                    DropdownTextField(
+                        value = "",
+                        label = "Agregar mecánico",
+                        expanded = selectorMecanicosExpandido,
+                        onExpandedChange = { selectorMecanicosExpandido = it },
+                        onDismissRequest = { selectorMecanicosExpandido = false },
+                        placeholder = { Text("Selecciona un mecánico disponible") },
+                        enabled = !soloLectura && mecanicos.any { it.id !in mecanicosSeleccionados },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { closeMenu ->
+                        val disponibles = mecanicos.filter { it.id !in mecanicosSeleccionados }
+                        if (disponibles.isEmpty()) {
+                            DropdownMenuItem(
+                                text = { Text("Sin mecánicos disponibles") },
+                                onClick = {},
+                                enabled = false
                             )
-                            Text(mecanico.nombre)
+                        } else {
+                            disponibles.forEach { mecanico ->
+                                DropdownMenuItem(
+                                    text = { Text(mecanico.nombre) },
+                                    onClick = {
+                                        mecanicosSeleccionados += mecanico.id
+                                        closeMenu()
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        mecanicos.filter { it.id in mecanicosSeleccionados }.forEach { mecanico ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(mecanico.nombre)
+                                    Text(mecanico.email, style = MaterialTheme.typography.bodySmall)
+                                }
+                                TextButton(
+                                    onClick = { mecanicosSeleccionados.remove(mecanico.id) },
+                                    enabled = !soloLectura
+                                ) {
+                                    Text("Quitar")
+                                }
+                            }
+                        }
+                        if (mecanicosSeleccionados.isEmpty()) {
+                            Text("Selecciona al menos un mecánico", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     if (mecanicos.isEmpty()) {
                         Text("No hay mecánicos disponibles", color = MaterialTheme.colorScheme.error)
                     }
                 }
-                Button(onClick = {
-                    onGuardarDatos(notas, mecanicosSeleccionados.toList(), patente)
-                }) {
+                Button(
+                    onClick = {
+                        onGuardarDatos(notas, mecanicosSeleccionados.toList(), patente)
+                    },
+                    enabled = !soloLectura
+                ) {
                     Text("Guardar datos generales")
                 }
             }
@@ -381,11 +449,14 @@ private fun OtDetailPanel(
                 items.forEach { item ->
                     PresupuestoItemEditor(
                         item = item,
-                        onRemove = { if (items.size > 1) items.remove(item) }
+                        soloLectura = soloLectura,
+                        onRemove = { if (!soloLectura && items.size > 1) items.remove(item) }
                     )
                 }
-                TextButton(onClick = { items += PresupuestoItemFormState() }) {
-                    Text("Agregar ítem")
+                if (!soloLectura) {
+                    TextButton(onClick = { items += PresupuestoItemFormState() }) {
+                        Text("Agregar ítem")
+                    }
                 }
                 var subtotal = 0
                 var subtotalRep = 0
@@ -403,6 +474,7 @@ private fun OtDetailPanel(
                     Switch(
                         checked = presupuestoAprobado,
                         onCheckedChange = { presupuestoAprobado = it },
+                        enabled = !soloLectura,
                         colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary)
                     )
                     Spacer(Modifier.width(8.dp))
@@ -415,6 +487,7 @@ private fun OtDetailPanel(
                     },
                     label = { Text("IVA %") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    enabled = !soloLectura,
                     modifier = Modifier.width(120.dp)
                 )
                 Text("Subtotal MO: $subtotalMo")
@@ -425,30 +498,33 @@ private fun OtDetailPanel(
                 presupuestoError?.let { error ->
                     Text(error, color = MaterialTheme.colorScheme.error)
                 }
-                Button(onClick = {
-                    val ivaInt = ivaTexto.toIntOrNull()
-                    val itemsValidos = items.mapNotNull { item ->
-                        val cantidad = item.cantidad.toIntOrNull()
-                        val precio = item.precio.toIntOrNull()
-                        if (cantidad == null || precio == null || item.descripcion.isBlank()) {
-                            null
-                        } else {
-                            PresupuestoItem(
-                                id = item.id,
-                                tipo = item.tipo,
-                                descripcion = item.descripcion.trim(),
-                                cantidad = cantidad,
-                                precioUnit = precio
-                            )
+                Button(
+                    onClick = {
+                        val ivaInt = ivaTexto.toIntOrNull()
+                        val itemsValidos = items.mapNotNull { item ->
+                            val cantidad = item.cantidad.toIntOrNull()
+                            val precio = item.precio.toIntOrNull()
+                            if (cantidad == null || precio == null || item.descripcion.isBlank()) {
+                                null
+                            } else {
+                                PresupuestoItem(
+                                    id = item.id,
+                                    tipo = item.tipo,
+                                    descripcion = item.descripcion.trim(),
+                                    cantidad = cantidad,
+                                    precioUnit = precio
+                                )
+                            }
                         }
-                    }
-                    if (ivaInt == null || itemsValidos.size != items.size) {
-                        presupuestoError = "Revisa los datos numéricos del presupuesto"
-                    } else {
-                        presupuestoError = null
-                        onGuardarPresupuesto(itemsValidos, presupuestoAprobado, ivaInt)
-                    }
-                }) {
+                        if (ivaInt == null || itemsValidos.size != items.size) {
+                            presupuestoError = "Revisa los datos numéricos del presupuesto"
+                        } else {
+                            presupuestoError = null
+                            onGuardarPresupuesto(itemsValidos, presupuestoAprobado, ivaInt)
+                        }
+                    },
+                    enabled = !soloLectura
+                ) {
                     Text("Guardar presupuesto")
                 }
             }
@@ -463,16 +539,21 @@ private fun OtDetailPanel(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Checkbox(
                                     checked = tarea.completada,
-                                    onCheckedChange = { tarea.completada = it }
+                                    onCheckedChange = { tarea.completada = it },
+                                    enabled = !soloLectura
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 OutlinedTextField(
                                     value = tarea.titulo,
                                     onValueChange = { tarea.titulo = it },
                                     label = { Text("Nombre de tarea") },
+                                    enabled = !soloLectura,
                                     modifier = Modifier.weight(1f)
                                 )
-                                IconButton(onClick = { if (tareas.size > 1) tareas.remove(tarea) }) {
+                                IconButton(
+                                    onClick = { if (!soloLectura && tareas.size > 1) tareas.remove(tarea) },
+                                    enabled = !soloLectura
+                                ) {
                                     Icon(Icons.Default.Delete, contentDescription = "Eliminar tarea")
                                 }
                             }
@@ -480,23 +561,29 @@ private fun OtDetailPanel(
                                 value = tarea.descripcion,
                                 onValueChange = { tarea.descripcion = it },
                                 label = { Text("Descripción realizada") },
+                                enabled = !soloLectura,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
                     }
                 }
-                TextButton(onClick = { tareas += EditableTaskState() }) { Text("Agregar tarea") }
-                Button(onClick = {
-                    val tareasValidas = tareas.filter { it.titulo.isNotBlank() }.map {
-                        TareaOt(
-                            id = it.id,
-                            titulo = it.titulo.trim(),
-                            descripcion = it.descripcion.takeIf(String::isNotBlank),
-                            completada = it.completada
-                        )
-                    }
-                    onGuardarTareas(tareasValidas)
-                }) {
+                if (!soloLectura) {
+                    TextButton(onClick = { tareas += EditableTaskState() }) { Text("Agregar tarea") }
+                }
+                Button(
+                    onClick = {
+                        val tareasValidas = tareas.filter { it.titulo.isNotBlank() }.map {
+                            TareaOt(
+                                id = it.id,
+                                titulo = it.titulo.trim(),
+                                descripcion = it.descripcion.takeIf(String::isNotBlank),
+                                completada = it.completada
+                            )
+                        }
+                        onGuardarTareas(tareasValidas)
+                    },
+                    enabled = !soloLectura
+                ) {
                     Text("Guardar tareas")
                 }
             }
@@ -504,10 +591,10 @@ private fun OtDetailPanel(
             Divider()
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                Button(onClick = onIniciar, enabled = puedeIniciar) {
+                Button(onClick = onIniciar, enabled = puedeIniciar && !soloLectura) {
                     Text("Iniciar OT")
                 }
-                Button(onClick = onFinalizar, enabled = puedeFinalizar) {
+                Button(onClick = onFinalizar, enabled = puedeFinalizar && !soloLectura) {
                     Text("Finalizar OT")
                 }
             }
@@ -516,13 +603,13 @@ private fun OtDetailPanel(
 }
 
 @Composable
-private fun PresupuestoItemEditor(item: PresupuestoItemFormState, onRemove: () -> Unit) {
+private fun PresupuestoItemEditor(item: PresupuestoItemFormState, soloLectura: Boolean, onRemove: () -> Unit) {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Ítem", style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = onRemove) {
+                IconButton(onClick = onRemove, enabled = !soloLectura) {
                     Icon(Icons.Default.Delete, contentDescription = "Eliminar ítem")
                 }
             }
@@ -535,21 +622,27 @@ private fun PresupuestoItemEditor(item: PresupuestoItemFormState, onRemove: () -
                 expanded = item.tipoMenuExpanded,
                 onExpandedChange = { item.tipoMenuExpanded = it },
                 onDismissRequest = { item.tipoMenuExpanded = false },
+                enabled = !soloLectura,
                 modifier = Modifier.fillMaxWidth()
             ) { closeMenu ->
                 DropdownMenuItem(text = { Text("Mano de obra") }, onClick = {
-                    item.tipo = ItemTipo.MO
-                    closeMenu()
+                    if (!soloLectura) {
+                        item.tipo = ItemTipo.MO
+                        closeMenu()
+                    }
                 })
                 DropdownMenuItem(text = { Text("Repuesto") }, onClick = {
-                    item.tipo = ItemTipo.REP
-                    closeMenu()
+                    if (!soloLectura) {
+                        item.tipo = ItemTipo.REP
+                        closeMenu()
+                    }
                 })
             }
             OutlinedTextField(
                 value = item.descripcion,
                 onValueChange = { item.descripcion = it },
                 label = { Text("Descripción") },
+                enabled = !soloLectura,
                 modifier = Modifier.fillMaxWidth()
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -558,6 +651,7 @@ private fun PresupuestoItemEditor(item: PresupuestoItemFormState, onRemove: () -
                     onValueChange = { item.cantidad = it.filter(Char::isDigit) },
                     label = { Text("Cantidad") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    enabled = !soloLectura,
                     modifier = Modifier.weight(1f)
                 )
                 OutlinedTextField(
@@ -565,10 +659,21 @@ private fun PresupuestoItemEditor(item: PresupuestoItemFormState, onRemove: () -
                     onValueChange = { item.precio = it.filter(Char::isDigit) },
                     label = { Text("Precio unitario") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    enabled = !soloLectura,
                     modifier = Modifier.weight(1f)
                 )
             }
         }
     }
+}
+
+// Formatea el estado interno a un nombre amigable para los usuarios.
+private fun OtState.toReadableName(): String = when (this) {
+    OtState.BORRADOR -> "Borrador"
+    OtState.DIAGNOSTICO -> "Diagnóstico"
+    OtState.PRESUPUESTO -> "Presupuesto"
+    OtState.PEND_APROB -> "Pendiente de aprobación"
+    OtState.EN_EJECUCION -> "En ejecución"
+    OtState.FINALIZADA -> "Finalizada"
 }
 
