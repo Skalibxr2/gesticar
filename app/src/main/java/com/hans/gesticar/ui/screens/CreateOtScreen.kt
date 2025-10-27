@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -17,16 +18,11 @@ import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenu
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.menuAnchor
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -43,7 +39,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -53,6 +48,7 @@ import com.hans.gesticar.model.PresupuestoItem
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
 import com.hans.gesticar.ui.Routes
+import com.hans.gesticar.ui.components.DropdownTextField
 import com.hans.gesticar.viewmodel.MainViewModel
 import com.hans.gesticar.util.formatRutInput
 import com.hans.gesticar.util.isRutValid
@@ -497,7 +493,6 @@ private fun ClienteSection(
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
 private fun VehiculoSection(
     patente: String,
     onPatenteChange: (String) -> Unit,
@@ -531,43 +526,34 @@ private fun VehiculoSection(
             val descripcionSeleccionado = vehiculos.firstOrNull { it.patente == vehiculoSeleccionado }
                 ?.let { "${it.patente} • ${it.marca} ${it.modelo}" }
                 ?: vehiculoSeleccionado.orEmpty()
-            ExposedDropdownMenuBox(
+            DropdownTextField(
+                value = descripcionSeleccionado,
+                label = "Vehículos registrados",
                 expanded = expanded,
-                onExpandedChange = { expanded = !expanded }
-            ) {
-                OutlinedTextField(
-                    value = descripcionSeleccionado,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Vehículos registrados") },
-                    placeholder = { Text(if (hayVehiculos) "Selecciona un vehículo" else "Sin vehículos previos") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                    modifier = Modifier
-                        .menuAnchor()
-                        .fillMaxWidth(),
-                    enabled = hayVehiculos
-                )
-                ExposedDropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
-                ) {
-                    vehiculos.forEach { vehiculo ->
-                        DropdownMenuItem(
-                            text = { Text("${vehiculo.patente} • ${vehiculo.marca} ${vehiculo.modelo}") },
-                            onClick = {
-                                onSeleccionarVehiculo(vehiculo)
-                                expanded = false
-                            }
-                        )
-                    }
+                onExpandedChange = { expanded = it },
+                onDismissRequest = { expanded = false },
+                enabled = hayVehiculos,
+                placeholder = {
+                    Text(if (hayVehiculos) "Selecciona un vehículo" else "Sin vehículos previos")
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { closeMenu ->
+                vehiculos.forEach { vehiculo ->
                     DropdownMenuItem(
-                        text = { Text("Registrar nuevo vehículo") },
+                        text = { Text("${vehiculo.patente} • ${vehiculo.marca} ${vehiculo.modelo}") },
                         onClick = {
-                            onCrearNuevoVehiculo()
-                            expanded = false
+                            onSeleccionarVehiculo(vehiculo)
+                            closeMenu()
                         }
                     )
                 }
+                DropdownMenuItem(
+                    text = { Text("Registrar nuevo vehículo") },
+                    onClick = {
+                        onCrearNuevoVehiculo()
+                        closeMenu()
+                    }
+                )
             }
             if (!hayVehiculos) {
                 Text("Registra un nuevo vehículo para este cliente", style = MaterialTheme.typography.bodySmall)
@@ -649,7 +635,6 @@ private fun VehiculoSection(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MecanicosSection(
     mecanicos: List<Usuario>,
@@ -667,35 +652,26 @@ private fun MecanicosSection(
             val seleccionadosIds = seleccionados.map(Usuario::id).toSet()
             val disponibles = mecanicos.filter { it.id !in seleccionadosIds }
             var expanded by remember { mutableStateOf(false) }
-            ExposedDropdownMenuBox(
+            DropdownTextField(
+                value = "",
+                label = "Seleccionar mecánico",
                 expanded = expanded,
-                onExpandedChange = { expanded = !expanded }
-            ) {
-                OutlinedTextField(
-                    value = "",
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Seleccionar mecánico") },
-                    placeholder = { Text(if (disponibles.isEmpty()) "Sin opciones" else "Elige un mecánico") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                    enabled = disponibles.isNotEmpty(),
-                    modifier = Modifier
-                        .menuAnchor()
-                        .fillMaxWidth()
-                )
-                ExposedDropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
-                ) {
-                    disponibles.forEach { mecanico ->
-                        DropdownMenuItem(
-                            text = { Text("${mecanico.nombre} • ${mecanico.email}") },
-                            onClick = {
-                                onSelect(mecanico)
-                                expanded = false
-                            }
-                        )
-                    }
+                onExpandedChange = { expanded = it },
+                onDismissRequest = { expanded = false },
+                enabled = disponibles.isNotEmpty(),
+                placeholder = {
+                    Text(if (disponibles.isEmpty()) "Sin opciones" else "Elige un mecánico")
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { closeMenu ->
+                disponibles.forEach { mecanico ->
+                    DropdownMenuItem(
+                        text = { Text("${mecanico.nombre} • ${mecanico.email}") },
+                        onClick = {
+                            onSelect(mecanico)
+                            closeMenu()
+                        }
+                    )
                 }
             }
             if (seleccionados.isEmpty()) {

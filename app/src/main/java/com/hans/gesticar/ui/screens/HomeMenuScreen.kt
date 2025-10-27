@@ -10,6 +10,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.hans.gesticar.model.Rol
 import com.hans.gesticar.ui.Routes
+import com.hans.gesticar.ui.components.DropdownTextField
 import com.hans.gesticar.viewmodel.MainViewModel
 
 @Composable
@@ -82,7 +83,6 @@ private fun MechanicActions(onBuscar: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CrearUsuarioDialog(
     onDismiss: () -> Unit,
@@ -107,34 +107,31 @@ private fun CrearUsuarioDialog(
                     label = { Text("Contraseña") },
                     visualTransformation = PasswordVisualTransformation()
                 )
-                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-                    OutlinedTextField(
-                        value = when (rol) {
-                            Rol.ADMIN -> "Administrador"
-                            Rol.MECANICO -> "Mecánico"
-                        },
-                        onValueChange = {},
-                        label = { Text("Rol") },
-                        readOnly = true,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                        modifier = Modifier.menuAnchor()
+                DropdownTextField(
+                    value = when (rol) {
+                        Rol.ADMIN -> "Administrador"
+                        Rol.MECANICO -> "Mecánico"
+                    },
+                    label = "Rol",
+                    expanded = expanded,
+                    onExpandedChange = { expanded = it },
+                    onDismissRequest = { expanded = false },
+                    modifier = Modifier.fillMaxWidth()
+                ) { closeMenu ->
+                    DropdownMenuItem(
+                        text = { Text("Administrador") },
+                        onClick = {
+                            rol = Rol.ADMIN
+                            closeMenu()
+                        }
                     )
-                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Administrador") },
-                            onClick = {
-                                rol = Rol.ADMIN
-                                expanded = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Mecánico") },
-                            onClick = {
-                                rol = Rol.MECANICO
-                                expanded = false
-                            }
-                        )
-                    }
+                    DropdownMenuItem(
+                        text = { Text("Mecánico") },
+                        onClick = {
+                            rol = Rol.MECANICO
+                            closeMenu()
+                        }
+                    )
                 }
             }
         },
