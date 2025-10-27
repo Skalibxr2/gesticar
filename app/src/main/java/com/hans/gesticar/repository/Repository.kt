@@ -16,6 +16,10 @@ interface Repository {
     suspend fun cambiarEstado(otId: String, nuevo: OtState): Boolean
     suspend fun obtenerMecanicos(): List<Usuario>
     suspend fun obtenerSiguienteNumeroOt(): Int
+    suspend fun buscarClientePorRut(rut: String): Cliente?
+    suspend fun guardarCliente(cliente: Cliente)
+    suspend fun obtenerVehiculosPorRut(rut: String): List<Vehiculo>
+    suspend fun guardarVehiculo(vehiculo: Vehiculo)
     suspend fun crearOt(
         cliente: Cliente,
         vehiculo: Vehiculo,

@@ -32,7 +32,13 @@ data class CreateOtUiState(
     val mecanicos: List<Usuario> = emptyList(),
     val guardando: Boolean = false,
     val mensaje: String? = null,
-    val exito: Boolean = false
+    val exito: Boolean = false,
+    val cliente: Cliente? = null,
+    val vehiculosCliente: List<Vehiculo> = emptyList(),
+    val guardandoCliente: Boolean = false,
+    val mensajeCliente: String? = null,
+    val guardandoVehiculo: Boolean = false,
+    val mensajeVehiculo: String? = null
 )
 
 class MainViewModel(
@@ -66,8 +72,81 @@ class MainViewModel(
                     mecanicos = mecanicos,
                     guardando = false,
                     mensaje = null,
-                    exito = false
+                    exito = false,
+                    cliente = null,
+                    vehiculosCliente = emptyList(),
+                    guardandoCliente = false,
+                    mensajeCliente = null,
+                    guardandoVehiculo = false,
+                    mensajeVehiculo = null
                 )
+            }
+        }
+    }
+
+    fun buscarClientePorRut(rut: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cliente = repo.buscarClientePorRut(rut)
+            val vehiculos = if (cliente != null) repo.obtenerVehiculosPorRut(rut) else emptyList()
+            _createOtUi.update {
+                it.copy(
+                    cliente = cliente,
+                    vehiculosCliente = vehiculos,
+                    mensajeCliente = if (cliente != null) "Cliente encontrado" else "Cliente no registrado",
+                    guardandoCliente = false,
+                    guardandoVehiculo = false,
+                    mensajeVehiculo = null
+                )
+            }
+        }
+    }
+
+    fun guardarCliente(cliente: Cliente) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _createOtUi.update { it.copy(guardandoCliente = true, mensajeCliente = null) }
+            try {
+                repo.guardarCliente(cliente)
+                val almacenado = repo.buscarClientePorRut(cliente.rut)
+                val vehiculos = repo.obtenerVehiculosPorRut(cliente.rut)
+                _createOtUi.update {
+                    it.copy(
+                        guardandoCliente = false,
+                        cliente = almacenado,
+                        vehiculosCliente = vehiculos,
+                        mensajeCliente = "Cliente guardado correctamente"
+                    )
+                }
+            } catch (e: Exception) {
+                _createOtUi.update {
+                    it.copy(
+                        guardandoCliente = false,
+                        mensajeCliente = e.message ?: "Error al guardar el cliente"
+                    )
+                }
+            }
+        }
+    }
+
+    fun guardarVehiculo(vehiculo: Vehiculo) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _createOtUi.update { it.copy(guardandoVehiculo = true, mensajeVehiculo = null) }
+            try {
+                repo.guardarVehiculo(vehiculo)
+                val vehiculos = repo.obtenerVehiculosPorRut(vehiculo.clienteRut)
+                _createOtUi.update {
+                    it.copy(
+                        guardandoVehiculo = false,
+                        vehiculosCliente = vehiculos,
+                        mensajeVehiculo = "Vehículo guardado"
+                    )
+                }
+            } catch (e: Exception) {
+                _createOtUi.update {
+                    it.copy(
+                        guardandoVehiculo = false,
+                        mensajeVehiculo = e.message ?: "Error al guardar el vehículo"
+                    )
+                }
             }
         }
     }
@@ -117,7 +196,13 @@ class MainViewModel(
                         mecanicos = mecanicosActualizados,
                         guardando = false,
                         mensaje = if (iniciar) "OT creada e iniciada" else "OT guardada como borrador",
-                        exito = true
+                        exito = true,
+                        cliente = null,
+                        vehiculosCliente = emptyList(),
+                        mensajeCliente = null,
+                        mensajeVehiculo = null,
+                        guardandoCliente = false,
+                        guardandoVehiculo = false
                     )
                 }
             } catch (e: Exception) {
