@@ -52,6 +52,7 @@ import com.hans.gesticar.model.PresupuestoItem
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
 import com.hans.gesticar.ui.Routes
+import com.hans.gesticar.ui.components.VehiclePhotosSection
 import com.hans.gesticar.viewmodel.MainViewModel
 import com.hans.gesticar.util.formatRutInput
 import com.hans.gesticar.util.isRutValid
@@ -626,6 +627,10 @@ private fun VehiculoSection(
                 onValueChange = onSintomasChange,
                 label = { Text("Síntomas entregados por el cliente") },
                 modifier = Modifier.fillMaxWidth()
+            )
+            VehiclePhotosSection(
+                receptionTitle = "Fotos al recibir el vehículo",
+                completionTitle = "Fotos de avance o entrega"
             )
             if (guardandoVehiculo) {
                 Text("Guardando vehículo...", style = MaterialTheme.typography.bodySmall)

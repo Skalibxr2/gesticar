@@ -52,9 +52,10 @@ import com.hans.gesticar.model.PresupuestoItem
 import com.hans.gesticar.model.Rol
 import com.hans.gesticar.model.TareaOt
 import com.hans.gesticar.model.Usuario
+import com.hans.gesticar.ui.components.DropdownTextField
+import com.hans.gesticar.ui.components.VehiclePhotosSection
 import com.hans.gesticar.util.formatRutInput
 import com.hans.gesticar.util.normalizeRut
-import com.hans.gesticar.ui.components.DropdownTextField
 import com.hans.gesticar.viewmodel.MainViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -372,6 +373,10 @@ private fun OtDetailPanel(
                 }) {
                     Text("Guardar datos generales")
                 }
+                VehiclePhotosSection(
+                    receptionTitle = "Evidencia al recibir el vehículo",
+                    completionTitle = "Evidencia de reparación o entrega"
+                )
             }
 
             Divider()
