@@ -62,6 +62,22 @@ data class Presupuesto(
     val iva: Int get() = (subtotal * ivaPorc) / 100
     val total: Int get() = subtotal + iva
 }
+
+data class TareaOt(
+    val id: String = UUID.randomUUID().toString(),
+    val titulo: String,
+    val descripcion: String? = null,
+    val completada: Boolean = false
+)
+
+data class OtDetalle(
+    val ot: Ot,
+    val cliente: Cliente?,
+    val vehiculo: Vehiculo?,
+    val mecanicosAsignados: List<Usuario>,
+    val presupuesto: Presupuesto,
+    val tareas: List<TareaOt>
+)
 data class Evidencia(
     val id: String = UUID.randomUUID().toString(),
     val otId: String,

@@ -7,9 +7,11 @@ import com.hans.gesticar.model.EvidenciaEtapa
 import com.hans.gesticar.model.ItemTipo
 import com.hans.gesticar.model.Ot
 import com.hans.gesticar.model.OtState
+import com.hans.gesticar.model.OtDetalle
 import com.hans.gesticar.model.Presupuesto
 import com.hans.gesticar.model.PresupuestoItem
 import com.hans.gesticar.model.Rol
+import com.hans.gesticar.model.TareaOt
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
 import com.hans.gesticar.util.normalizeRut
@@ -44,6 +46,7 @@ class FakeRepository : Repository {
     val presupuestos = mutableMapOf<String, Presupuesto>() // key: otId
     val evidencias = mutableListOf<Evidencia>()
     val audit = mutableListOf<AuditLog>()
+    val tareas = mutableMapOf<String, MutableList<TareaOt>>()
 
     init {
         // Seed mínimo
@@ -83,6 +86,10 @@ class FakeRepository : Repository {
         )
         agregarItemPresupuesto(ot.id, ItemTipo.MO, "Diagnóstico", 1, 15000)
         agregarItemPresupuesto(ot.id, ItemTipo.REP, "Bujías", 4, 8000)
+        tareas[ot.id] = mutableListOf(
+            TareaOt(titulo = "Revisión inicial", descripcion = "Verificar tren delantero"),
+            TareaOt(titulo = "Cambio de bujías", completada = false)
+        )
     }
 
     fun nextOtNumber(): Int = otCounter.incrementAndGet()
@@ -115,6 +122,7 @@ class FakeRepository : Repository {
         )
         ots += ot
         presupuestos[ot.id] = Presupuesto(otId = ot.id)
+        tareas[ot.id] = mutableListOf()
         log(ot.id, "CREAR_OT")
         return ot
     }
@@ -212,6 +220,93 @@ class FakeRepository : Repository {
     override suspend fun buscarOtPorPatente(patente: String): List<Ot> {
         val pat = patente.uppercase()
         return ots.filter { it.vehiculoPatente == pat }
+    }
+
+    override suspend fun buscarOtPorRut(rut: String): List<Ot> {
+        val rutNormalizado = normalizeRut(rut)
+        val patentes = vehiculos.filter { normalizeRut(it.clienteRut) == rutNormalizado }.map { it.patente }
+        return ots.filter { it.vehiculoPatente in patentes }
+    }
+
+    override suspend fun buscarOtPorEstado(estado: OtState): List<Ot> =
+        ots.filter { it.estado == estado }
+
+    override suspend fun obtenerDetalleOt(otId: String): OtDetalle? {
+        val ot = ots.firstOrNull { it.id == otId } ?: return null
+        val vehiculo = vehiculos.firstOrNull { it.patente.equals(ot.vehiculoPatente, ignoreCase = true) }
+        val cliente = vehiculo?.let { v ->
+            clientes.firstOrNull { normalizeRut(it.rut) == normalizeRut(v.clienteRut) }
+        }
+        val presupuestoOriginal = presupuestos[otId] ?: Presupuesto(otId = otId)
+        val presupuesto = Presupuesto(
+            otId = presupuestoOriginal.otId,
+            items = presupuestoOriginal.items.map { it.copy() }.toMutableList(),
+            aprobado = presupuestoOriginal.aprobado,
+            ivaPorc = presupuestoOriginal.ivaPorc
+        )
+        val mecanicos = usuarios.filter { it.id in ot.mecanicosAsignados }
+        val tareasGuardadas = tareas[otId]?.map { it.copy() } ?: emptyList()
+        return OtDetalle(
+            ot = ot,
+            cliente = cliente,
+            vehiculo = vehiculo,
+            mecanicosAsignados = mecanicos,
+            presupuesto = presupuesto,
+            tareas = tareasGuardadas
+        )
+    }
+
+    override suspend fun actualizarNotasOt(otId: String, notas: String?) {
+        val index = ots.indexOfFirst { it.id == otId }
+        if (index >= 0) {
+            val ot = ots[index]
+            ots[index] = ot.copy(notas = notas)
+            log(otId, "ACTUALIZAR_NOTAS")
+        }
+    }
+
+    override suspend fun actualizarMecanicosOt(otId: String, mecanicosIds: List<String>) {
+        val index = ots.indexOfFirst { it.id == otId }
+        if (index >= 0) {
+            val ot = ots[index]
+            ots[index] = ot.copy(mecanicosAsignados = mecanicosIds)
+            log(otId, "ACTUALIZAR_MECANICOS")
+        }
+    }
+
+    override suspend fun actualizarVehiculoOt(otId: String, patente: String): Boolean {
+        val index = ots.indexOfFirst { it.id == otId }
+        if (index < 0) return false
+        val ot = ots[index]
+        if (ot.estado == OtState.EN_EJECUCION || ot.estado == OtState.FINALIZADA) {
+            return false
+        }
+        val patenteUpper = patente.uppercase()
+        val existeVehiculo = vehiculos.any { it.patente == patenteUpper }
+        if (!existeVehiculo) return false
+        ots[index] = ot.copy(vehiculoPatente = patenteUpper)
+        log(otId, "ACTUALIZAR_VEHICULO")
+        return true
+    }
+
+    override suspend fun guardarPresupuesto(
+        otId: String,
+        items: List<PresupuestoItem>,
+        aprobado: Boolean,
+        ivaPorc: Int
+    ) {
+        val presupuesto = presupuestos.getOrPut(otId) { Presupuesto(otId = otId) }
+        presupuesto.items.clear()
+        presupuesto.items += items
+        presupuesto.aprobado = aprobado
+        presupuesto.ivaPorc = ivaPorc
+        log(otId, "ACTUALIZAR_PRESUPUESTO")
+    }
+
+    override suspend fun guardarTareas(otId: String, tareas: List<TareaOt>) {
+        val copia = tareas.map { it.copy() }.toMutableList()
+        this.tareas[otId] = copia
+        log(otId, "ACTUALIZAR_TAREAS")
     }
 
     fun agregarEvidencia(otId: String, etapa: EvidenciaEtapa, uriLocal: String) {
