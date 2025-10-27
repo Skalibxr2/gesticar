@@ -45,13 +45,26 @@ dependencies {
 
     implementation(libs.identity.jvm)
 
+    // Compose foundation (LazyRow, matchParentSize, etc.)
+    implementation("androidx.compose.foundation:foundation")
+
+    // Material icons (AddAPhoto, Collections)
+    implementation("androidx.compose.material:material-icons-extended")
+
+    // Coil para AsyncImage
+    implementation("io.coil-kt:coil-compose:2.7.0")
+
     implementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(platform(libs.androidx.compose.bom))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
-    implementation(libs.coil.compose)
+    //implementation(libs.coil.compose)
+
+    //implementation(platform(libs.compose.bom))
+    implementation("androidx.activity:activity-compose:1.9.2")
+    implementation("androidx.compose.ui:ui")
 
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
