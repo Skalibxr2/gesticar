@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
@@ -44,6 +43,12 @@ import coil.compose.AsyncImage
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.activity.result.PickVisualMediaRequest
+
+
+
+
+
 
 @Composable
 fun VehiclePhotosSection(
@@ -127,7 +132,9 @@ fun VehiclePhotosSection(
                 }
             },
             onGallery = {
-                pickReceptionGallery.launch(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                pickReceptionGallery.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                )
             }
         )
 
@@ -150,7 +157,9 @@ fun VehiclePhotosSection(
                 }
             },
             onGallery = {
-                pickRepairGallery.launch(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                pickRepairGallery.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                )
             }
         )
     }
