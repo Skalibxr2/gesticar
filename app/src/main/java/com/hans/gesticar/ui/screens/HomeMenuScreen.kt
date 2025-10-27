@@ -31,7 +31,10 @@ fun HomeMenuScreen(vm: MainViewModel, nav: NavController) {
             when (usuario.rol) {
                 Rol.ADMIN -> {
                     Text("Panel de administración", style = MaterialTheme.typography.titleMedium)
-                    AdminActions(onBuscar = { nav.navigate(Routes.SEARCH_OT) })
+                    AdminActions(
+                        onCrear = { nav.navigate(Routes.CREATE_OT) },
+                        onBuscar = { nav.navigate(Routes.SEARCH_OT) }
+                    )
                 }
                 Rol.MECANICO -> {
                     Text("Panel de mecánico", style = MaterialTheme.typography.titleMedium)
@@ -47,13 +50,10 @@ fun HomeMenuScreen(vm: MainViewModel, nav: NavController) {
 }
 
 @Composable
-private fun AdminActions(onBuscar: () -> Unit) {
+private fun AdminActions(onCrear: () -> Unit, onBuscar: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Button(onClick = { /* TODO: implementar creación de OT */ }, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = onCrear, modifier = Modifier.fillMaxWidth()) {
             Text("Crear Orden de Trabajo")
-        }
-        Button(onClick = { /* TODO: implementar asignación */ }, modifier = Modifier.fillMaxWidth()) {
-            Text("Asignar mecánico a OT")
         }
         Button(onClick = onBuscar, modifier = Modifier.fillMaxWidth()) {
             Text("Buscar Orden de Trabajo")

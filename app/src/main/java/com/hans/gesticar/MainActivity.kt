@@ -16,9 +16,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.hans.gesticar.ui.Routes
+import com.hans.gesticar.ui.screens.LoginScreen
+import com.hans.gesticar.ui.screens.CreateOtScreen
 import com.hans.gesticar.ui.screens.HomeMenuScreen
 import com.hans.gesticar.ui.screens.SearchOtScreen
-import com.hans.gesticar.ui.screens.LoginScreen
 import com.hans.gesticar.repository.SqliteRepository
 import com.hans.gesticar.viewmodel.MainViewModel
 import com.hans.gesticar.viewmodel.MainViewModelFactory
@@ -70,6 +71,16 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             SearchOtScreen(vm = vm)
+                        }
+                        composable(Routes.CREATE_OT) {
+                            LaunchedEffect(uiState.estaAutenticado) {
+                                if (!uiState.estaAutenticado) {
+                                    nav.navigate(Routes.LOGIN) {
+                                        popUpTo(Routes.CREATE_OT) { inclusive = true }
+                                    }
+                                }
+                            }
+                            CreateOtScreen(vm = vm, nav = nav)
                         }
                     }
                 }

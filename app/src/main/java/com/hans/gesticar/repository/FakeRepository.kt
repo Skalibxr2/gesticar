@@ -1,10 +1,21 @@
 package com.hans.gesticar.repository
 
-import com.hans.gesticar.model.*
+import com.hans.gesticar.model.AuditLog
+import com.hans.gesticar.model.Cliente
+import com.hans.gesticar.model.Evidencia
+import com.hans.gesticar.model.EvidenciaEtapa
+import com.hans.gesticar.model.ItemTipo
+import com.hans.gesticar.model.Ot
+import com.hans.gesticar.model.OtState
+import com.hans.gesticar.model.Presupuesto
+import com.hans.gesticar.model.PresupuestoItem
+import com.hans.gesticar.model.Rol
+import com.hans.gesticar.model.Usuario
+import com.hans.gesticar.model.Vehiculo
 import java.util.concurrent.atomic.AtomicInteger
 
 class FakeRepository : Repository {
-    private val otCounter = AtomicInteger(1000)
+    private val otCounter = AtomicInteger(999)
 
     val usuarios = mutableListOf(
         Usuario(
@@ -29,10 +40,10 @@ class FakeRepository : Repository {
 
     init {
         // Seed mínimo
-        val c = Cliente(nombre = "Juan Pérez", email = "juan@example.com")
+        val c = Cliente(rut = "12.345.678-9", nombre = "Juan Pérez", correo = "juan@example.com")
         clientes += c
         val v = Vehiculo(
-            clienteId = c.id,
+            clienteRut = c.rut,
             patente = "ABCD12",
             marca = "Toyota",
             modelo = "Yaris",
@@ -43,8 +54,11 @@ class FakeRepository : Repository {
         )
         vehiculos += v
         val mecanico = usuarios.first { it.rol == Rol.MECANICO }
-        val ot = crearOT(vehiculoId = v.id, notas = "Ruidos en tren delantero")
-        ot.mecanicoAsignadoId = mecanico.id
+        val ot = crearOtInternal(
+            vehiculoPatente = v.patente,
+            notas = "Ruidos en tren delantero",
+            mecanicos = listOf(mecanico.id)
+        )
         agregarItemPresupuesto(ot.id, ItemTipo.MO, "Diagnóstico", 1, 15000)
         agregarItemPresupuesto(ot.id, ItemTipo.REP, "Bujías", 4, 8000)
     }
@@ -61,48 +75,53 @@ class FakeRepository : Repository {
 
     fun obtenerUsuario(id: String): Usuario? = usuarios.firstOrNull { it.id == id }
 
-    fun obtenerMecanicos(): List<Usuario> = usuarios.filter { it.rol == Rol.MECANICO }
+    override suspend fun obtenerMecanicos(): List<Usuario> = usuarios.filter { it.rol == Rol.MECANICO }
 
-    fun crearCliente(nombre: String, telefono: String?, email: String?): Cliente {
-        val c = Cliente(nombre = nombre, telefono = telefono, email = email)
-        clientes += c
-        return c
-    }
+    override suspend fun obtenerSiguienteNumeroOt(): Int = otCounter.get() + 1
 
-    fun crearVehiculo(
-        clienteId: String, patente: String, marca: String, modelo: String, anio: Int,
-        color: String?, km: Int?, combustible: String?, obs: String?
-    ): Vehiculo {
-        val v = Vehiculo(
-            clienteId = clienteId,
-            patente = patente.uppercase(),
-            marca = marca,
-            modelo = modelo,
-            anio = anio,
-            color = color,
-            kilometraje = km,
-            combustible = combustible,
-            observaciones = obs
+    private fun crearOtInternal(
+        vehiculoPatente: String,
+        notas: String?,
+        mecanicos: List<String>
+    ): Ot {
+        val ot = Ot(
+            numero = nextOtNumber(),
+            vehiculoPatente = vehiculoPatente,
+            notas = notas,
+            mecanicosAsignados = mecanicos
         )
-        vehiculos += v
-        return v
-    }
-
-    fun crearOT(vehiculoId: String, notas: String?): Ot {
-        val ot = Ot(numero = nextOtNumber(), vehiculoId = vehiculoId, notas = notas)
         ots += ot
         presupuestos[ot.id] = Presupuesto(otId = ot.id)
         log(ot.id, "CREAR_OT")
         return ot
     }
 
-    fun asignarMecanico(otId: String, mecanicoId: String): Boolean {
-        val ot = ots.find { it.id == otId } ?: return false
-        val mecanico = obtenerUsuario(mecanicoId) ?: return false
-        if (mecanico.rol != Rol.MECANICO) return false
-        ot.mecanicoAsignadoId = mecanicoId
-        log(otId, "ASIGNAR_MECANICO:${mecanico.email}")
-        return true
+    override suspend fun crearOt(
+        cliente: Cliente,
+        vehiculo: Vehiculo,
+        mecanicosIds: List<String>,
+        presupuestoItems: List<PresupuestoItem>,
+        presupuestoAprobado: Boolean,
+        sintomas: String?
+    ): Ot {
+        val rutUpper = cliente.rut.uppercase()
+        clientes.removeAll { it.rut.equals(rutUpper, ignoreCase = true) }
+        clientes += cliente.copy(rut = rutUpper)
+
+        val patenteUpper = vehiculo.patente.uppercase()
+        vehiculos.removeAll { it.patente.equals(patenteUpper, ignoreCase = true) }
+        vehiculos += vehiculo.copy(patente = patenteUpper, clienteRut = rutUpper)
+
+        val ot = crearOtInternal(patenteUpper, sintomas, mecanicosIds)
+
+        val presupuesto = presupuestos.getValue(ot.id)
+        presupuesto.items.clear()
+        presupuesto.items += presupuestoItems
+        presupuesto.aprobado = presupuestoAprobado
+        if (presupuestoAprobado) {
+            log(ot.id, "PRESUPUESTO_APROBADO")
+        }
+        return ot
     }
 
     fun obtenerPresupuesto(otId: String): Presupuesto = presupuestos.getValue(otId)
@@ -146,8 +165,7 @@ class FakeRepository : Repository {
 
     override suspend fun buscarOtPorPatente(patente: String): List<Ot> {
         val pat = patente.uppercase()
-        val vehIds = vehiculos.filter { it.patente == pat }.map { it.id }.toSet()
-        return ots.filter { it.vehiculoId in vehIds }
+        return ots.filter { it.vehiculoPatente == pat }
     }
 
     fun agregarEvidencia(otId: String, etapa: EvidenciaEtapa, uriLocal: String) {
