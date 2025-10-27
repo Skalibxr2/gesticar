@@ -10,6 +10,9 @@ import androidx.compose.ui.unit.dp
 import com.hans.gesticar.model.Ot
 import com.hans.gesticar.model.Rol
 import com.hans.gesticar.viewmodel.MainViewModel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun SearchOtScreen(vm: MainViewModel) {
@@ -66,7 +69,12 @@ fun SearchOtScreen(vm: MainViewModel) {
 private fun OtCard(ot: Ot) {
     ElevatedCard {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            val fechaFormateada = remember(ot.fechaCreacion) {
+                val formatter = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+                formatter.format(Date(ot.fechaCreacion))
+            }
             Text("OT #${'$'}{ot.numero}", style = MaterialTheme.typography.titleMedium)
+            Text("Creada el: ${'$'}fechaFormateada", style = MaterialTheme.typography.bodySmall)
             Text("Estado: ${'$'}{ot.estado}")
         }
     }
