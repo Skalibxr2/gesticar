@@ -88,7 +88,8 @@ class FakeRepository : Repository {
             numero = nextOtNumber(),
             vehiculoPatente = vehiculoPatente,
             notas = notas,
-            mecanicosAsignados = mecanicos
+            mecanicosAsignados = mecanicos,
+            fechaCreacion = System.currentTimeMillis()
         )
         ots += ot
         presupuestos[ot.id] = Presupuesto(otId = ot.id)

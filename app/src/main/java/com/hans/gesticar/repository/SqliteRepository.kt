@@ -16,7 +16,7 @@ import com.hans.gesticar.model.Vehiculo
 import java.util.UUID
 
 private const val DB_NAME = "gesticar.db"
-private const val DB_VERSION = 2
+private const val DB_VERSION = 3
 
 class SqliteRepository(context: Context) : Repository {
     private val helper = object : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
@@ -65,6 +65,7 @@ class SqliteRepository(context: Context) : Repository {
                     vehiculo_patente TEXT NOT NULL,
                     estado TEXT NOT NULL,
                     notas TEXT,
+                    creada_en INTEGER NOT NULL,
                     FOREIGN KEY (vehiculo_patente) REFERENCES vehiculos(patente)
                 )
                 """.trimIndent()
@@ -194,6 +195,7 @@ class SqliteRepository(context: Context) : Repository {
                 )
 
                 val otId = UUID.randomUUID().toString()
+                val createdAt = System.currentTimeMillis()
                 db.insertOrThrow(
                     "ots",
                     null,
@@ -203,6 +205,7 @@ class SqliteRepository(context: Context) : Repository {
                         put("vehiculo_patente", patente)
                         put("estado", OtState.BORRADOR.name)
                         put("notas", "Ruidos en tren delantero")
+                        put("creada_en", createdAt)
                     }
                 )
 
@@ -274,7 +277,7 @@ class SqliteRepository(context: Context) : Repository {
     override suspend fun obtenerOts(): List<Ot> {
         val db = helper.readableDatabase
         val cursor = db.rawQuery(
-            "SELECT id, numero, vehiculo_patente, estado, notas FROM ots ORDER BY numero",
+            "SELECT id, numero, vehiculo_patente, estado, notas, creada_en FROM ots ORDER BY numero",
             null
         )
         return mapOts(db, cursor)
@@ -302,7 +305,7 @@ class SqliteRepository(context: Context) : Repository {
     override suspend fun buscarOtPorNumero(numero: Int): Ot? {
         val db = helper.readableDatabase
         val cursor = db.rawQuery(
-            "SELECT id, numero, vehiculo_patente, estado, notas FROM ots WHERE numero = ?",
+            "SELECT id, numero, vehiculo_patente, estado, notas, creada_en FROM ots WHERE numero = ?",
             arrayOf(numero.toString())
         )
         cursor.use {
@@ -317,7 +320,7 @@ class SqliteRepository(context: Context) : Repository {
         val db = helper.readableDatabase
         val cursor = db.rawQuery(
             """
-            SELECT o.id, o.numero, o.vehiculo_patente, o.estado, o.notas
+            SELECT o.id, o.numero, o.vehiculo_patente, o.estado, o.notas, o.creada_en
             FROM ots o
             WHERE UPPER(o.vehiculo_patente) = UPPER(?)
             ORDER BY o.numero
@@ -400,6 +403,7 @@ class SqliteRepository(context: Context) : Repository {
 
             val numero = calcularSiguienteNumero(db)
             val otId = UUID.randomUUID().toString()
+            val createdAt = System.currentTimeMillis()
 
             db.insertOrThrow(
                 "ots",
@@ -410,6 +414,7 @@ class SqliteRepository(context: Context) : Repository {
                     put("vehiculo_patente", patente)
                     put("estado", OtState.BORRADOR.name)
                     put("notas", sintomas)
+                    put("creada_en", createdAt)
                 }
             )
 
@@ -464,7 +469,8 @@ class SqliteRepository(context: Context) : Repository {
                 vehiculoPatente = patente,
                 estado = OtState.BORRADOR,
                 mecanicosAsignados = mecanicosIds.distinct(),
-                notas = sintomas
+                notas = sintomas,
+                fechaCreacion = createdAt
             )
         } finally {
             db.endTransaction()
@@ -533,7 +539,8 @@ class SqliteRepository(context: Context) : Repository {
         vehiculoPatente = cursor.getString(2),
         estado = OtState.valueOf(cursor.getString(3)),
         mecanicosAsignados = mecanicos,
-        notas = cursor.getString(4)
+        notas = cursor.getString(4),
+        fechaCreacion = cursor.getLong(5)
     )
 
     private fun mapOts(db: SQLiteDatabase, cursor: Cursor): List<Ot> {

@@ -84,5 +84,6 @@ data class Ot(
     val vehiculoPatente: String,
     var estado: OtState = OtState.BORRADOR,
     val mecanicosAsignados: List<String> = emptyList(),
-    var notas: String? = null
+    var notas: String? = null,
+    val fechaCreacion: Long = Instant.now().toEpochMilli()
 )
