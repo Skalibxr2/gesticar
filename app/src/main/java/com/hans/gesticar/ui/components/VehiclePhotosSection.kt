@@ -1,7 +1,9 @@
 package com.hans.gesticar.ui.components
 
+import android.Manifest
 import android.content.ContentValues
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -44,6 +46,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import androidx.activity.result.PickVisualMediaRequest
+import androidx.core.content.ContextCompat
 
 
 
@@ -64,6 +67,18 @@ fun VehiclePhotosSection(
 
     var pendingReceptionCameraUri by remember { mutableStateOf<Uri?>(null) }
     var pendingRepairCameraUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingCameraAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    val requestCameraPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            pendingCameraAction?.invoke()
+        } else {
+            Toast.makeText(context, "Se requiere permiso de cámara", Toast.LENGTH_SHORT).show()
+        }
+        pendingCameraAction = null
+    }
 
     val takeReceptionPhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         val uri = pendingReceptionCameraUri
@@ -103,6 +118,19 @@ fun VehiclePhotosSection(
         }
     }
 
+    fun ensureCameraPermission(onPermissionGranted: () -> Unit) {
+        val hasPermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+        if (hasPermission) {
+            onPermissionGranted()
+        } else {
+            pendingCameraAction = onPermissionGranted
+            requestCameraPermission.launch(Manifest.permission.CAMERA)
+        }
+    }
+
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
             text = "Registro fotográfico",
@@ -123,12 +151,14 @@ fun VehiclePhotosSection(
                 }
             },
             onCamera = {
-                val uri = createImageUri(context, "recepcion")
-                if (uri != null) {
-                    pendingReceptionCameraUri = uri
-                    takeReceptionPhoto.launch(uri)
-                } else {
-                    Toast.makeText(context, "No se pudo abrir la cámara", Toast.LENGTH_SHORT).show()
+                ensureCameraPermission {
+                    val uri = createImageUri(context, "recepcion")
+                    if (uri != null) {
+                        pendingReceptionCameraUri = uri
+                        takeReceptionPhoto.launch(uri)
+                    } else {
+                        Toast.makeText(context, "No se pudo abrir la cámara", Toast.LENGTH_SHORT).show()
+                    }
                 }
             },
             onGallery = {
@@ -148,12 +178,14 @@ fun VehiclePhotosSection(
                 }
             },
             onCamera = {
-                val uri = createImageUri(context, "reparacion")
-                if (uri != null) {
-                    pendingRepairCameraUri = uri
-                    takeRepairPhoto.launch(uri)
-                } else {
-                    Toast.makeText(context, "No se pudo abrir la cámara", Toast.LENGTH_SHORT).show()
+                ensureCameraPermission {
+                    val uri = createImageUri(context, "reparacion")
+                    if (uri != null) {
+                        pendingRepairCameraUri = uri
+                        takeRepairPhoto.launch(uri)
+                    } else {
+                        Toast.makeText(context, "No se pudo abrir la cámara", Toast.LENGTH_SHORT).show()
+                    }
                 }
             },
             onGallery = {
