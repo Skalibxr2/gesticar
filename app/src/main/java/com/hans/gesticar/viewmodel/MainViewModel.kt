@@ -19,6 +19,18 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 
+data class SectionMessage(
+    val text: String,
+    val isError: Boolean = false
+)
+
+data class DetalleMensajes(
+    val datos: SectionMessage? = null,
+    val presupuesto: SectionMessage? = null,
+    val tareas: SectionMessage? = null,
+    val estado: SectionMessage? = null
+)
+
 data class UiState(
     val estaAutenticado: Boolean = false,
     val usuarioActual: Usuario? = null,
@@ -28,6 +40,8 @@ data class UiState(
     val mensaje: String? = null,
     val detalleSeleccionado: OtDetalle? = null,
     val mecanicosDisponibles: List<Usuario> = emptyList(),
+    val vehiculosCliente: List<Vehiculo> = emptyList(),
+    val detalleMensajes: DetalleMensajes = DetalleMensajes(),
     val cargandoDetalle: Boolean = false
 )
 
@@ -66,7 +80,10 @@ class MainViewModel(
         }
     }
 
-    private suspend fun actualizarDetalle(otId: String, mensaje: String? = null) {
+    private suspend fun actualizarDetalle(
+        otId: String,
+        mensajesDetalle: DetalleMensajes = DetalleMensajes()
+    ) {
         val detalle = repo.obtenerDetalleOt(otId)
         val mecanicos = repo.obtenerMecanicos()
         val ots = repo.obtenerOts()
@@ -75,27 +92,45 @@ class MainViewModel(
         } else {
             _ui.value.resultadosBusqueda
         }
+        val rutCliente = detalle?.cliente?.rut ?: detalle?.vehiculo?.clienteRut
+        val vehiculos = rutCliente?.let { repo.obtenerVehiculosPorRut(it) } ?: emptyList()
         _ui.update {
             it.copy(
                 detalleSeleccionado = detalle,
                 mecanicosDisponibles = mecanicos,
                 cargandoDetalle = false,
-                mensaje = mensaje,
+                mensaje = null,
                 resultadosBusqueda = resultadosActualizados,
-                ots = ots
+                ots = ots,
+                vehiculosCliente = vehiculos,
+                detalleMensajes = mensajesDetalle
             )
         }
     }
 
     fun seleccionarOt(otId: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            _ui.update { it.copy(cargandoDetalle = true, mensaje = null) }
+            _ui.update {
+                it.copy(
+                    cargandoDetalle = true,
+                    mensaje = null,
+                    detalleMensajes = DetalleMensajes(),
+                    vehiculosCliente = emptyList()
+                )
+            }
             actualizarDetalle(otId)
         }
     }
 
     fun limpiarSeleccion() {
-        _ui.update { it.copy(detalleSeleccionado = null, cargandoDetalle = false) }
+        _ui.update {
+            it.copy(
+                detalleSeleccionado = null,
+                cargandoDetalle = false,
+                vehiculosCliente = emptyList(),
+                detalleMensajes = DetalleMensajes()
+            )
+        }
     }
 
     fun prepararNuevaOt() {
@@ -265,7 +300,12 @@ class MainViewModel(
                     usuarioActual = if (ok) user else null,
                     displayName = user?.nombre,
                     resultadosBusqueda = emptyList(),
-                    mensaje = if (ok) null else "Credenciales inválidas"
+                    mensaje = if (ok) null else "Credenciales inválidas",
+                    detalleMensajes = DetalleMensajes(),
+                    vehiculosCliente = emptyList(),
+                    detalleSeleccionado = null,
+                    mecanicosDisponibles = emptyList(),
+                    cargandoDetalle = false
                 )
             }
         }
@@ -279,7 +319,10 @@ class MainViewModel(
                 resultadosBusqueda = emptyList(),
                 detalleSeleccionado = null,
                 mecanicosDisponibles = emptyList(),
-                cargandoDetalle = false
+                cargandoDetalle = false,
+                vehiculosCliente = emptyList(),
+                detalleMensajes = DetalleMensajes(),
+                mensaje = null
             )
         }
     }
@@ -293,7 +336,9 @@ class MainViewModel(
                     resultadosBusqueda = emptyList(),
                     mensaje = "Debes iniciar sesión para buscar órdenes.",
                     detalleSeleccionado = null,
-                    cargandoDetalle = false
+                    cargandoDetalle = false,
+                    vehiculosCliente = emptyList(),
+                    detalleMensajes = DetalleMensajes()
                 )
             }
             return
@@ -312,7 +357,9 @@ class MainViewModel(
                     resultadosBusqueda = resultados,
                     mensaje = mensaje,
                     detalleSeleccionado = null,
-                    cargandoDetalle = false
+                    cargandoDetalle = false,
+                    vehiculosCliente = emptyList(),
+                    detalleMensajes = DetalleMensajes()
                 )
             }
         }
@@ -326,7 +373,9 @@ class MainViewModel(
                     resultadosBusqueda = emptyList(),
                     mensaje = "Debes iniciar sesión para buscar órdenes.",
                     detalleSeleccionado = null,
-                    cargandoDetalle = false
+                    cargandoDetalle = false,
+                    vehiculosCliente = emptyList(),
+                    detalleMensajes = DetalleMensajes()
                 )
             }
             return
@@ -340,7 +389,9 @@ class MainViewModel(
                     resultadosBusqueda = lista,
                     mensaje = mensaje,
                     detalleSeleccionado = null,
-                    cargandoDetalle = false
+                    cargandoDetalle = false,
+                    vehiculosCliente = emptyList(),
+                    detalleMensajes = DetalleMensajes()
                 )
             }
         }
@@ -354,7 +405,9 @@ class MainViewModel(
                     resultadosBusqueda = emptyList(),
                     mensaje = "Debes iniciar sesión para buscar órdenes.",
                     detalleSeleccionado = null,
-                    cargandoDetalle = false
+                    cargandoDetalle = false,
+                    vehiculosCliente = emptyList(),
+                    detalleMensajes = DetalleMensajes()
                 )
             }
             return
@@ -368,7 +421,9 @@ class MainViewModel(
                     resultadosBusqueda = lista,
                     mensaje = mensaje,
                     detalleSeleccionado = null,
-                    cargandoDetalle = false
+                    cargandoDetalle = false,
+                    vehiculosCliente = emptyList(),
+                    detalleMensajes = DetalleMensajes()
                 )
             }
         }
@@ -382,7 +437,9 @@ class MainViewModel(
                     resultadosBusqueda = emptyList(),
                     mensaje = "Debes iniciar sesión para buscar órdenes.",
                     detalleSeleccionado = null,
-                    cargandoDetalle = false
+                    cargandoDetalle = false,
+                    vehiculosCliente = emptyList(),
+                    detalleMensajes = DetalleMensajes()
                 )
             }
             return
@@ -396,7 +453,9 @@ class MainViewModel(
                     resultadosBusqueda = lista,
                     mensaje = mensaje,
                     detalleSeleccionado = null,
-                    cargandoDetalle = false
+                    cargandoDetalle = false,
+                    vehiculosCliente = emptyList(),
+                    detalleMensajes = DetalleMensajes()
                 )
             }
         }
@@ -408,17 +467,19 @@ class MainViewModel(
             val detalleActual = repo.obtenerDetalleOt(otId)
             val vehiculoActual = detalleActual?.ot?.vehiculoPatente
             val patenteNormalizada = vehiculoPatente?.uppercase()?.takeIf { it.isNotBlank() }
-            var mensaje: String? = null
+            var error: String? = null
             if (patenteNormalizada != null && patenteNormalizada != vehiculoActual) {
                 val ok = repo.actualizarVehiculoOt(otId, patenteNormalizada)
                 if (!ok) {
-                    mensaje = "No se pudo actualizar el vehículo. Verifica la patente o el estado de la OT."
+                    error = "No se pudo actualizar el vehículo. Verifica la patente o el estado de la OT."
                 }
             }
             repo.actualizarNotasOt(otId, notas)
             repo.actualizarMecanicosOt(otId, mecanicosIds)
             refreshOts()
-            actualizarDetalle(otId, mensaje ?: "Datos generales guardados")
+            val mensajeSeccion = error?.let { SectionMessage(it, isError = true) }
+                ?: SectionMessage("Datos generales guardados")
+            actualizarDetalle(otId, DetalleMensajes(datos = mensajeSeccion))
         }
     }
 
@@ -426,14 +487,14 @@ class MainViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             repo.guardarPresupuesto(otId, items, aprobado, ivaPorc)
             refreshOts()
-            actualizarDetalle(otId, "Presupuesto actualizado")
+            actualizarDetalle(otId, DetalleMensajes(presupuesto = SectionMessage("Presupuesto actualizado")))
         }
     }
 
     fun guardarTareas(otId: String, tareas: List<TareaOt>) {
         viewModelScope.launch(Dispatchers.IO) {
             repo.guardarTareas(otId, tareas)
-            actualizarDetalle(otId, "Tareas actualizadas")
+            actualizarDetalle(otId, DetalleMensajes(tareas = SectionMessage("Tareas actualizadas")))
         }
     }
 
@@ -441,7 +502,13 @@ class MainViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             val detalle = repo.obtenerDetalleOt(otId)
             if (detalle == null) {
-                _ui.update { it.copy(mensaje = "No se encontró la OT seleccionada") }
+                _ui.update {
+                    it.copy(
+                        mensaje = "No se encontró la OT seleccionada",
+                        detalleMensajes = DetalleMensajes(),
+                        vehiculosCliente = emptyList()
+                    )
+                }
                 return@launch
             }
             val datosCompletos = detalle.cliente != null && detalle.vehiculo != null &&
@@ -449,18 +516,29 @@ class MainViewModel(
             if (!detalle.presupuesto.aprobado || !datosCompletos) {
                 _ui.update {
                     it.copy(
-                        mensaje = "Faltan datos críticos para iniciar la OT",
-                        detalleSeleccionado = detalle
+                        detalleSeleccionado = detalle,
+                        detalleMensajes = DetalleMensajes(
+                            estado = SectionMessage(
+                                text = "Faltan datos críticos para iniciar la OT",
+                                isError = true
+                            )
+                        )
                     )
                 }
                 return@launch
             }
             val ok = repo.cambiarEstado(otId, OtState.EN_EJECUCION)
             if (!ok) {
-                _ui.update { it.copy(mensaje = "No fue posible iniciar la OT") }
+                _ui.update {
+                    it.copy(
+                        detalleMensajes = DetalleMensajes(
+                            estado = SectionMessage("No fue posible iniciar la OT", isError = true)
+                        )
+                    )
+                }
             } else {
                 refreshOts()
-                actualizarDetalle(otId, "OT iniciada")
+                actualizarDetalle(otId, DetalleMensajes(estado = SectionMessage("OT iniciada")))
             }
         }
     }
@@ -469,10 +547,16 @@ class MainViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             val ok = repo.cambiarEstado(otId, OtState.FINALIZADA)
             if (!ok) {
-                _ui.update { it.copy(mensaje = "No fue posible finalizar la OT") }
+                _ui.update {
+                    it.copy(
+                        detalleMensajes = DetalleMensajes(
+                            estado = SectionMessage("No fue posible finalizar la OT", isError = true)
+                        )
+                    )
+                }
             } else {
                 refreshOts()
-                actualizarDetalle(otId, "OT finalizada")
+                actualizarDetalle(otId, DetalleMensajes(estado = SectionMessage("OT finalizada")))
             }
         }
     }
@@ -483,7 +567,7 @@ class MainViewModel(
             repo.aprobarPresupuesto(otId)
             val seleccionado = _ui.value.detalleSeleccionado?.ot?.id
             if (seleccionado == otId) {
-                actualizarDetalle(otId, "Presupuesto aprobado")
+                actualizarDetalle(otId, DetalleMensajes(presupuesto = SectionMessage("Presupuesto aprobado")))
             } else {
                 val currentResults = _ui.value.resultadosBusqueda
                 val updatedOt = currentResults.firstOrNull { it.id == otId }?.numero?.let { repo.buscarOtPorNumero(it) }
@@ -521,7 +605,7 @@ class MainViewModel(
             val ots = if (ok) repo.obtenerOts() else _ui.value.ots
             val seleccionado = _ui.value.detalleSeleccionado?.ot?.id
             if (ok && seleccionado == otId) {
-                actualizarDetalle(otId, "Estado actualizado")
+                actualizarDetalle(otId, DetalleMensajes(estado = SectionMessage("Estado actualizado")))
             } else {
                 _ui.update {
                     it.copy(
