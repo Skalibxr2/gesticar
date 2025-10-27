@@ -19,24 +19,23 @@ data class Usuario(
 
 
 data class Cliente(
-    val id: String = UUID.randomUUID().toString(),
+    val rut: String,
     val nombre: String,
-    val telefono: String? = null,
-    val email: String? = null
+    val correo: String? = null,
+    val direccion: String? = null,
+    val telefono: String? = null
 )
 
 
 data class Vehiculo(
-    val id: String = UUID.randomUUID().toString(),
-    val clienteId: String,
     val patente: String, // Ej.: ABCD12
+    val clienteRut: String,
     val marca: String,
     val modelo: String,
     val anio: Int,
     val color: String? = null,
     val kilometraje: Int? = null,
-    val combustible: String? = null, // Ej.: Gasolina/Diesel/Híbrido/Eléctrico
-    val observaciones: String? = null
+    val combustible: String? = null
 )
 
 
@@ -82,8 +81,8 @@ data class AuditLog(
 data class Ot(
     val id: String = UUID.randomUUID().toString(),
     val numero: Int, // Número visible de OT
-    val vehiculoId: String,
+    val vehiculoPatente: String,
     var estado: OtState = OtState.BORRADOR,
-    var mecanicoAsignadoId: String? = null,
+    val mecanicosAsignados: List<String> = emptyList(),
     var notas: String? = null
 )

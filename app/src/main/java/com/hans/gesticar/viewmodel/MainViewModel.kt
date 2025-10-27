@@ -2,10 +2,13 @@ package com.hans.gesticar.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hans.gesticar.model.Cliente
 import com.hans.gesticar.model.Ot
 import com.hans.gesticar.model.OtState
+import com.hans.gesticar.model.PresupuestoItem
 import com.hans.gesticar.model.Rol
 import com.hans.gesticar.model.Usuario
+import com.hans.gesticar.model.Vehiculo
 import com.hans.gesticar.repository.Repository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,12 +27,23 @@ data class UiState(
     val mensaje: String? = null
 )
 
+data class CreateOtUiState(
+    val numeroOt: Int = 1000,
+    val mecanicos: List<Usuario> = emptyList(),
+    val guardando: Boolean = false,
+    val mensaje: String? = null,
+    val exito: Boolean = false
+)
+
 class MainViewModel(
     private val repo: Repository
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui
+
+    private val _createOtUi = MutableStateFlow(CreateOtUiState())
+    val createOtUi: StateFlow<CreateOtUiState> = _createOtUi
 
     init {
         refreshOts()
@@ -39,6 +53,82 @@ class MainViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             val ots = repo.obtenerOts()
             _ui.update { it.copy(ots = ots) }
+        }
+    }
+
+    fun prepararNuevaOt() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val numero = repo.obtenerSiguienteNumeroOt()
+            val mecanicos = repo.obtenerMecanicos()
+            _createOtUi.update {
+                it.copy(
+                    numeroOt = numero,
+                    mecanicos = mecanicos,
+                    guardando = false,
+                    mensaje = null,
+                    exito = false
+                )
+            }
+        }
+    }
+
+    fun crearOt(
+        cliente: Cliente,
+        vehiculo: Vehiculo,
+        mecanicosIds: List<String>,
+        presupuestoItems: List<PresupuestoItem>,
+        presupuestoAprobado: Boolean,
+        sintomas: String?,
+        iniciar: Boolean
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _createOtUi.update { it.copy(guardando = true, mensaje = null, exito = false) }
+            try {
+                val ot = repo.crearOt(
+                    cliente = cliente,
+                    vehiculo = vehiculo,
+                    mecanicosIds = mecanicosIds,
+                    presupuestoItems = presupuestoItems,
+                    presupuestoAprobado = presupuestoAprobado,
+                    sintomas = sintomas
+                )
+
+                if (iniciar) {
+                    val pudoIniciar = repo.cambiarEstado(ot.id, OtState.EN_EJECUCION)
+                    if (!pudoIniciar) {
+                        _createOtUi.update {
+                            it.copy(
+                                guardando = false,
+                                mensaje = "No se pudo iniciar la OT. Verifica que el presupuesto esté aprobado.",
+                                exito = false
+                            )
+                        }
+                        refreshOts()
+                        return@launch
+                    }
+                }
+
+                val numeroSiguiente = repo.obtenerSiguienteNumeroOt()
+                val mecanicosActualizados = repo.obtenerMecanicos()
+                refreshOts()
+                _createOtUi.update {
+                    it.copy(
+                        numeroOt = numeroSiguiente,
+                        mecanicos = mecanicosActualizados,
+                        guardando = false,
+                        mensaje = if (iniciar) "OT creada e iniciada" else "OT guardada como borrador",
+                        exito = true
+                    )
+                }
+            } catch (e: Exception) {
+                _createOtUi.update {
+                    it.copy(
+                        guardando = false,
+                        mensaje = e.message ?: "Error al crear la OT",
+                        exito = false
+                    )
+                }
+            }
         }
     }
 
@@ -158,7 +248,7 @@ class MainViewModel(
 
 private fun List<Ot>.filtrarPara(usuario: Usuario?): List<Ot> {
     if (usuario?.rol == Rol.MECANICO) {
-        return filter { it.mecanicoAsignadoId == usuario.id }
+        return filter { usuario.id in it.mecanicosAsignados }
     }
     return this
 }
