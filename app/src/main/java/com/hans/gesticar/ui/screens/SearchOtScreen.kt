@@ -1,5 +1,3 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
-
 package com.hans.gesticar.ui.screens
 
 import androidx.compose.foundation.clickable
@@ -15,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -23,9 +22,6 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ExposedDropdownMenu
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -35,7 +31,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.menuAnchor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,7 +42,6 @@ import androidx.compose.runtime.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.hans.gesticar.model.ItemTipo
@@ -60,6 +54,7 @@ import com.hans.gesticar.model.TareaOt
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.util.formatRutInput
 import com.hans.gesticar.util.normalizeRut
+import com.hans.gesticar.ui.components.DropdownTextField
 import com.hans.gesticar.viewmodel.MainViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -131,27 +126,24 @@ fun SearchOtScreen(vm: MainViewModel) {
             }) { Text("Buscar RUT") }
         }
 
-        ExposedDropdownMenuBox(expanded = estadoExpanded, onExpandedChange = { estadoExpanded = !estadoExpanded }) {
-            OutlinedTextField(
-                value = estadoSeleccionado?.name ?: "Buscar por estado",
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Estado OT") },
-                modifier = Modifier
-                    .menuAnchor()
-                    .fillMaxWidth()
-            )
-            ExposedDropdownMenu(expanded = estadoExpanded, onDismissRequest = { estadoExpanded = false }) {
-                OtState.values().forEach { estado ->
-                    DropdownMenuItem(
-                        text = { Text(estado.name) },
-                        onClick = {
-                            estadoSeleccionado = estado
-                            estadoExpanded = false
-                            vm.buscarPorEstado(estado)
-                        }
-                    )
-                }
+        DropdownTextField(
+            value = estadoSeleccionado?.name.orEmpty(),
+            label = "Estado OT",
+            expanded = estadoExpanded,
+            onExpandedChange = { estadoExpanded = it },
+            onDismissRequest = { estadoExpanded = false },
+            placeholder = { Text("Buscar por estado") },
+            modifier = Modifier.fillMaxWidth()
+        ) { closeMenu ->
+            OtState.values().forEach { estado ->
+                DropdownMenuItem(
+                    text = { Text(estado.name) },
+                    onClick = {
+                        estadoSeleccionado = estado
+                        closeMenu()
+                        vm.buscarPorEstado(estado)
+                    }
+                )
             }
         }
 
@@ -534,35 +526,25 @@ private fun PresupuestoItemEditor(item: PresupuestoItemFormState, onRemove: () -
                     Icon(Icons.Default.Delete, contentDescription = "Eliminar ítem")
                 }
             }
-            ExposedDropdownMenuBox(
+            DropdownTextField(
+                value = when (item.tipo) {
+                    ItemTipo.MO -> "Mano de obra"
+                    ItemTipo.REP -> "Repuesto"
+                },
+                label = "Tipo",
                 expanded = item.tipoMenuExpanded,
-                onExpandedChange = { item.tipoMenuExpanded = !item.tipoMenuExpanded }
-            ) {
-                OutlinedTextField(
-                    value = when (item.tipo) {
-                        ItemTipo.MO -> "Mano de obra"
-                        ItemTipo.REP -> "Repuesto"
-                    },
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Tipo") },
-                    modifier = Modifier
-                        .menuAnchor()
-                        .fillMaxWidth()
-                )
-                ExposedDropdownMenu(
-                    expanded = item.tipoMenuExpanded,
-                    onDismissRequest = { item.tipoMenuExpanded = false }
-                ) {
-                    DropdownMenuItem(text = { Text("Mano de obra") }, onClick = {
-                        item.tipo = ItemTipo.MO
-                        item.tipoMenuExpanded = false
-                    })
-                    DropdownMenuItem(text = { Text("Repuesto") }, onClick = {
-                        item.tipo = ItemTipo.REP
-                        item.tipoMenuExpanded = false
-                    })
-                }
+                onExpandedChange = { item.tipoMenuExpanded = it },
+                onDismissRequest = { item.tipoMenuExpanded = false },
+                modifier = Modifier.fillMaxWidth()
+            ) { closeMenu ->
+                DropdownMenuItem(text = { Text("Mano de obra") }, onClick = {
+                    item.tipo = ItemTipo.MO
+                    closeMenu()
+                })
+                DropdownMenuItem(text = { Text("Repuesto") }, onClick = {
+                    item.tipo = ItemTipo.REP
+                    closeMenu()
+                })
             }
             OutlinedTextField(
                 value = item.descripcion,
