@@ -8,16 +8,19 @@ import android.database.sqlite.SQLiteOpenHelper
 import com.hans.gesticar.model.Cliente
 import com.hans.gesticar.model.ItemTipo
 import com.hans.gesticar.model.Ot
+import com.hans.gesticar.model.OtDetalle
 import com.hans.gesticar.model.OtState
+import com.hans.gesticar.model.Presupuesto
 import com.hans.gesticar.model.PresupuestoItem
 import com.hans.gesticar.model.Rol
+import com.hans.gesticar.model.TareaOt
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
 import com.hans.gesticar.util.normalizeRut
 import java.util.UUID
 
 private const val DB_NAME = "gesticar.db"
-private const val DB_VERSION = 3
+private const val DB_VERSION = 4
 
 class SqliteRepository(context: Context) : Repository {
     private val helper = object : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
@@ -107,6 +110,18 @@ class SqliteRepository(context: Context) : Repository {
             )
             db.execSQL(
                 """
+                CREATE TABLE ot_tareas (
+                    id TEXT PRIMARY KEY,
+                    ot_id TEXT NOT NULL,
+                    titulo TEXT NOT NULL,
+                    descripcion TEXT,
+                    completada INTEGER NOT NULL DEFAULT 0,
+                    FOREIGN KEY (ot_id) REFERENCES ots(id)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
                 CREATE TABLE audit_logs (
                     id TEXT PRIMARY KEY,
                     ot_id TEXT NOT NULL,
@@ -120,6 +135,7 @@ class SqliteRepository(context: Context) : Repository {
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+            db.execSQL("DROP TABLE IF EXISTS ot_tareas")
             db.execSQL("DROP TABLE IF EXISTS ot_mecanicos")
             db.execSQL("DROP TABLE IF EXISTS audit_logs")
             db.execSQL("DROP TABLE IF EXISTS presupuesto_items")
@@ -370,6 +386,35 @@ class SqliteRepository(context: Context) : Repository {
         return mapOts(db, cursor)
     }
 
+    override suspend fun buscarOtPorRut(rut: String): List<Ot> {
+        val db = helper.readableDatabase
+        val cursor = db.rawQuery(
+            """
+            SELECT o.id, o.numero, o.vehiculo_patente, o.estado, o.notas, o.creada_en
+            FROM ots o
+            JOIN vehiculos v ON o.vehiculo_patente = v.patente
+            WHERE v.cliente_rut = ?
+            ORDER BY o.numero
+            """.trimIndent(),
+            arrayOf(normalizeRut(rut))
+        )
+        return mapOts(db, cursor)
+    }
+
+    override suspend fun buscarOtPorEstado(estado: OtState): List<Ot> {
+        val db = helper.readableDatabase
+        val cursor = db.rawQuery(
+            """
+            SELECT id, numero, vehiculo_patente, estado, notas, creada_en
+            FROM ots
+            WHERE estado = ?
+            ORDER BY numero
+            """.trimIndent(),
+            arrayOf(estado.name)
+        )
+        return mapOts(db, cursor)
+    }
+
     override suspend fun obtenerMecanicos(): List<Usuario> {
         val db = helper.readableDatabase
         val cursor = db.rawQuery(
@@ -395,6 +440,40 @@ class SqliteRepository(context: Context) : Repository {
         val cursor = db.rawQuery("SELECT COALESCE(MAX(numero), 999) + 1 FROM ots", null)
         cursor.use {
             return if (it.moveToFirst()) it.getInt(0) else 1000
+        }
+    }
+
+    override suspend fun obtenerDetalleOt(otId: String): OtDetalle? {
+        val db = helper.readableDatabase
+        val cursor = db.rawQuery(
+            """
+            SELECT id, numero, vehiculo_patente, estado, notas, creada_en
+            FROM ots
+            WHERE id = ?
+            """.trimIndent(),
+            arrayOf(otId)
+        )
+        cursor.use {
+            if (!it.moveToFirst()) return null
+            val mecanicosIds = obtenerMecanicosOt(db, otId)
+            val ot = cursorToOt(it, mecanicosIds)
+            val vehiculo = obtenerVehiculo(db, ot.vehiculoPatente)
+            val cliente = vehiculo?.let { v -> obtenerCliente(db, v.clienteRut) }
+            val mecanicos = if (mecanicosIds.isEmpty()) {
+                emptyList()
+            } else {
+                obtenerUsuariosPorIds(db, mecanicosIds)
+            }
+            val presupuesto = obtenerPresupuesto(db, otId)
+            val tareas = obtenerTareas(db, otId)
+            return OtDetalle(
+                ot = ot,
+                cliente = cliente,
+                vehiculo = vehiculo,
+                mecanicosAsignados = mecanicos,
+                presupuesto = presupuesto,
+                tareas = tareas
+            )
         }
     }
 
@@ -464,6 +543,133 @@ class SqliteRepository(context: Context) : Repository {
         db.beginTransaction()
         try {
             upsertVehiculo(db, vehiculo)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override suspend fun actualizarNotasOt(otId: String, notas: String?) {
+        val db = helper.writableDatabase
+        val values = ContentValues().apply { put("notas", notas) }
+        db.update("ots", values, "id = ?", arrayOf(otId))
+        insertAudit(db, otId, "ACTUALIZAR_NOTAS")
+    }
+
+    override suspend fun actualizarMecanicosOt(otId: String, mecanicosIds: List<String>) {
+        val db = helper.writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("ot_mecanicos", "ot_id = ?", arrayOf(otId))
+            mecanicosIds.forEach { mecanicoId ->
+                db.insert(
+                    "ot_mecanicos",
+                    null,
+                    ContentValues().apply {
+                        put("ot_id", otId)
+                        put("mecanico_id", mecanicoId)
+                    }
+                )
+            }
+            insertAudit(db, otId, "ACTUALIZAR_MECANICOS")
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override suspend fun actualizarVehiculoOt(otId: String, patente: String): Boolean {
+        val db = helper.writableDatabase
+        db.beginTransaction()
+        try {
+            val cursor = db.rawQuery(
+                "SELECT vehiculo_patente, estado FROM ots WHERE id = ?",
+                arrayOf(otId)
+            )
+            cursor.use {
+                if (!it.moveToFirst()) return false
+                val estadoActual = OtState.valueOf(it.getString(1))
+                if (estadoActual == OtState.EN_EJECUCION || estadoActual == OtState.FINALIZADA) {
+                    return false
+                }
+            }
+            val patenteUpper = patente.uppercase()
+            val vehiculoExiste = db.rawQuery(
+                "SELECT 1 FROM vehiculos WHERE UPPER(patente) = UPPER(?)",
+                arrayOf(patenteUpper)
+            ).use { it.moveToFirst() }
+            if (!vehiculoExiste) {
+                return false
+            }
+            val values = ContentValues().apply { put("vehiculo_patente", patenteUpper) }
+            db.update("ots", values, "id = ?", arrayOf(otId))
+            insertAudit(db, otId, "ACTUALIZAR_VEHICULO")
+            db.setTransactionSuccessful()
+            return true
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override suspend fun guardarPresupuesto(
+        otId: String,
+        items: List<PresupuestoItem>,
+        aprobado: Boolean,
+        ivaPorc: Int
+    ) {
+        val db = helper.writableDatabase
+        db.beginTransaction()
+        try {
+            val values = ContentValues().apply {
+                put("ot_id", otId)
+                put("aprobado", if (aprobado) 1 else 0)
+                put("iva", ivaPorc)
+            }
+            val updated = db.update("presupuestos", values, "ot_id = ?", arrayOf(otId))
+            if (updated == 0) {
+                db.insert("presupuestos", null, values)
+            }
+            db.delete("presupuesto_items", "ot_id = ?", arrayOf(otId))
+            items.forEach { item ->
+                db.insert(
+                    "presupuesto_items",
+                    null,
+                    ContentValues().apply {
+                        put("id", item.id)
+                        put("ot_id", otId)
+                        put("tipo", item.tipo.name)
+                        put("descripcion", item.descripcion)
+                        put("cantidad", item.cantidad)
+                        put("precio_unit", item.precioUnit)
+                    }
+                )
+            }
+            insertAudit(db, otId, "ACTUALIZAR_PRESUPUESTO")
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override suspend fun guardarTareas(otId: String, tareas: List<TareaOt>) {
+        val db = helper.writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("ot_tareas", "ot_id = ?", arrayOf(otId))
+            tareas.forEach { tarea ->
+                db.insert(
+                    "ot_tareas",
+                    null,
+                    ContentValues().apply {
+                        put("id", tarea.id)
+                        put("ot_id", otId)
+                        put("titulo", tarea.titulo)
+                        put("descripcion", tarea.descripcion)
+                        put("completada", if (tarea.completada) 1 else 0)
+                    }
+                )
+            }
+            insertAudit(db, otId, "ACTUALIZAR_TAREAS")
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -634,6 +840,140 @@ class SqliteRepository(context: Context) : Repository {
         notas = cursor.getString(4),
         fechaCreacion = cursor.getLong(5)
     )
+
+    private fun obtenerVehiculo(db: SQLiteDatabase, patente: String): Vehiculo? {
+        val cursor = db.rawQuery(
+            """
+            SELECT patente, cliente_rut, marca, modelo, anio, color, kilometraje, combustible
+            FROM vehiculos
+            WHERE UPPER(patente) = UPPER(?)
+            """.trimIndent(),
+            arrayOf(patente)
+        )
+        cursor.use {
+            return if (it.moveToFirst()) {
+                Vehiculo(
+                    patente = it.getString(0),
+                    clienteRut = it.getString(1),
+                    marca = it.getString(2),
+                    modelo = it.getString(3),
+                    anio = it.getInt(4),
+                    color = it.getString(5),
+                    kilometraje = if (it.isNull(6)) null else it.getInt(6),
+                    combustible = it.getString(7)
+                )
+            } else {
+                null
+            }
+        }
+    }
+
+    private fun obtenerCliente(db: SQLiteDatabase, rut: String): Cliente? {
+        val cursor = db.rawQuery(
+            "SELECT rut, nombre, correo, direccion, telefono FROM clientes WHERE rut = ?",
+            arrayOf(rut)
+        )
+        cursor.use {
+            return if (it.moveToFirst()) {
+                Cliente(
+                    rut = it.getString(0),
+                    nombre = it.getString(1),
+                    correo = it.getString(2),
+                    direccion = it.getString(3),
+                    telefono = it.getString(4)
+                )
+            } else {
+                null
+            }
+        }
+    }
+
+    private fun obtenerUsuariosPorIds(db: SQLiteDatabase, ids: List<String>): List<Usuario> {
+        if (ids.isEmpty()) return emptyList()
+        val placeholders = ids.joinToString(",") { "?" }
+        val cursor = db.rawQuery(
+            "SELECT id, nombre, email, rol FROM usuarios WHERE id IN ($placeholders)",
+            ids.toTypedArray()
+        )
+        cursor.use {
+            val list = ArrayList<Usuario>(it.count.coerceAtLeast(0))
+            while (it.moveToNext()) {
+                list += Usuario(
+                    id = it.getString(0),
+                    nombre = it.getString(1),
+                    email = it.getString(2),
+                    rol = Rol.valueOf(it.getString(3))
+                )
+            }
+            return list
+        }
+    }
+
+    private fun obtenerPresupuesto(db: SQLiteDatabase, otId: String): Presupuesto {
+        val cursor = db.rawQuery(
+            "SELECT aprobado, iva FROM presupuestos WHERE ot_id = ?",
+            arrayOf(otId)
+        )
+        val items = mutableListOf<PresupuestoItem>()
+        var aprobado = false
+        var iva = 19
+        cursor.use {
+            if (it.moveToFirst()) {
+                aprobado = it.getInt(0) == 1
+                iva = it.getInt(1)
+            }
+        }
+        val itemsCursor = db.rawQuery(
+            """
+            SELECT id, tipo, descripcion, cantidad, precio_unit
+            FROM presupuesto_items
+            WHERE ot_id = ?
+            ORDER BY descripcion
+            """.trimIndent(),
+            arrayOf(otId)
+        )
+        itemsCursor.use {
+            while (it.moveToNext()) {
+                items += PresupuestoItem(
+                    id = it.getString(0),
+                    tipo = ItemTipo.valueOf(it.getString(1)),
+                    descripcion = it.getString(2),
+                    cantidad = it.getInt(3),
+                    precioUnit = it.getInt(4)
+                )
+            }
+        }
+        return Presupuesto(
+            otId = otId,
+            items = items,
+            aprobado = aprobado,
+            ivaPorc = iva
+        )
+    }
+
+    private fun obtenerTareas(db: SQLiteDatabase, otId: String): List<TareaOt> {
+        val cursor = db.rawQuery(
+            """
+            SELECT id, titulo, descripcion, completada
+            FROM ot_tareas
+            WHERE ot_id = ?
+            ORDER BY titulo
+            """.trimIndent(),
+            arrayOf(otId)
+        )
+        cursor.use {
+            val list = ArrayList<TareaOt>(it.count.coerceAtLeast(0))
+            while (it.moveToNext()) {
+                list += TareaOt(
+                    id = it.getString(0),
+                    titulo = it.getString(1),
+                    descripcion = it.getString(2),
+                    completada = it.getInt(3) == 1
+                )
+            }
+            return list
+        }
+    }
 
     private fun mapOts(db: SQLiteDatabase, cursor: Cursor): List<Ot> {
         cursor.use {

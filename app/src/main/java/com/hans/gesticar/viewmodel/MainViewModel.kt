@@ -4,9 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hans.gesticar.model.Cliente
 import com.hans.gesticar.model.Ot
+import com.hans.gesticar.model.OtDetalle
 import com.hans.gesticar.model.OtState
 import com.hans.gesticar.model.PresupuestoItem
 import com.hans.gesticar.model.Rol
+import com.hans.gesticar.model.TareaOt
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
 import com.hans.gesticar.repository.Repository
@@ -22,9 +24,11 @@ data class UiState(
     val usuarioActual: Usuario? = null,
     val displayName: String? = null,
     val ots: List<Ot> = emptyList(),
-    val seleccion: Ot? = null,
     val resultadosBusqueda: List<Ot> = emptyList(),
-    val mensaje: String? = null
+    val mensaje: String? = null,
+    val detalleSeleccionado: OtDetalle? = null,
+    val mecanicosDisponibles: List<Usuario> = emptyList(),
+    val cargandoDetalle: Boolean = false
 )
 
 data class CreateOtUiState(
@@ -60,6 +64,38 @@ class MainViewModel(
             val ots = repo.obtenerOts()
             _ui.update { it.copy(ots = ots) }
         }
+    }
+
+    private suspend fun actualizarDetalle(otId: String, mensaje: String? = null) {
+        val detalle = repo.obtenerDetalleOt(otId)
+        val mecanicos = repo.obtenerMecanicos()
+        val ots = repo.obtenerOts()
+        val resultadosActualizados = if (detalle != null) {
+            _ui.value.resultadosBusqueda.map { if (it.id == detalle.ot.id) detalle.ot else it }
+        } else {
+            _ui.value.resultadosBusqueda
+        }
+        _ui.update {
+            it.copy(
+                detalleSeleccionado = detalle,
+                mecanicosDisponibles = mecanicos,
+                cargandoDetalle = false,
+                mensaje = mensaje,
+                resultadosBusqueda = resultadosActualizados,
+                ots = ots
+            )
+        }
+    }
+
+    fun seleccionarOt(otId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _ui.update { it.copy(cargandoDetalle = true, mensaje = null) }
+            actualizarDetalle(otId)
+        }
+    }
+
+    fun limpiarSeleccion() {
+        _ui.update { it.copy(detalleSeleccionado = null, cargandoDetalle = false) }
     }
 
     fun prepararNuevaOt() {
@@ -240,7 +276,10 @@ class MainViewModel(
             it.copy(
                 estaAutenticado = false,
                 usuarioActual = null,
-                resultadosBusqueda = emptyList()
+                resultadosBusqueda = emptyList(),
+                detalleSeleccionado = null,
+                mecanicosDisponibles = emptyList(),
+                cargandoDetalle = false
             )
         }
     }
@@ -250,7 +289,12 @@ class MainViewModel(
         val usuario = _ui.value.usuarioActual
         if (usuario == null) {
             _ui.update {
-                it.copy(resultadosBusqueda = emptyList(), mensaje = "Debes iniciar sesión para buscar órdenes.")
+                it.copy(
+                    resultadosBusqueda = emptyList(),
+                    mensaje = "Debes iniciar sesión para buscar órdenes.",
+                    detalleSeleccionado = null,
+                    cargandoDetalle = false
+                )
             }
             return
         }
@@ -263,7 +307,14 @@ class MainViewModel(
                 resultados.isEmpty() -> "Esta OT no está asignada a ti"
                 else -> null
             }
-            _ui.update { it.copy(resultadosBusqueda = resultados, mensaje = mensaje) }
+            _ui.update {
+                it.copy(
+                    resultadosBusqueda = resultados,
+                    mensaje = mensaje,
+                    detalleSeleccionado = null,
+                    cargandoDetalle = false
+                )
+            }
         }
     }
 
@@ -271,7 +322,12 @@ class MainViewModel(
         val usuario = _ui.value.usuarioActual
         if (usuario == null) {
             _ui.update {
-                it.copy(resultadosBusqueda = emptyList(), mensaje = "Debes iniciar sesión para buscar órdenes.")
+                it.copy(
+                    resultadosBusqueda = emptyList(),
+                    mensaje = "Debes iniciar sesión para buscar órdenes.",
+                    detalleSeleccionado = null,
+                    cargandoDetalle = false
+                )
             }
             return
         }
@@ -279,7 +335,145 @@ class MainViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             val lista = repo.buscarOtPorPatente(patente).filtrarPara(usuario)
             val mensaje = if (lista.isEmpty()) "Sin resultados" else null
-            _ui.update { it.copy(resultadosBusqueda = lista, mensaje = mensaje) }
+            _ui.update {
+                it.copy(
+                    resultadosBusqueda = lista,
+                    mensaje = mensaje,
+                    detalleSeleccionado = null,
+                    cargandoDetalle = false
+                )
+            }
+        }
+    }
+
+    fun buscarPorRut(rut: String) {
+        val usuario = _ui.value.usuarioActual
+        if (usuario == null) {
+            _ui.update {
+                it.copy(
+                    resultadosBusqueda = emptyList(),
+                    mensaje = "Debes iniciar sesión para buscar órdenes.",
+                    detalleSeleccionado = null,
+                    cargandoDetalle = false
+                )
+            }
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val lista = repo.buscarOtPorRut(rut).filtrarPara(usuario)
+            val mensaje = if (lista.isEmpty()) "Sin resultados" else null
+            _ui.update {
+                it.copy(
+                    resultadosBusqueda = lista,
+                    mensaje = mensaje,
+                    detalleSeleccionado = null,
+                    cargandoDetalle = false
+                )
+            }
+        }
+    }
+
+    fun buscarPorEstado(estado: OtState) {
+        val usuario = _ui.value.usuarioActual
+        if (usuario == null) {
+            _ui.update {
+                it.copy(
+                    resultadosBusqueda = emptyList(),
+                    mensaje = "Debes iniciar sesión para buscar órdenes.",
+                    detalleSeleccionado = null,
+                    cargandoDetalle = false
+                )
+            }
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val lista = repo.buscarOtPorEstado(estado).filtrarPara(usuario)
+            val mensaje = if (lista.isEmpty()) "Sin resultados" else null
+            _ui.update {
+                it.copy(
+                    resultadosBusqueda = lista,
+                    mensaje = mensaje,
+                    detalleSeleccionado = null,
+                    cargandoDetalle = false
+                )
+            }
+        }
+    }
+
+    // --- Gestión detalle OT ---
+    fun guardarDatosOt(otId: String, notas: String?, mecanicosIds: List<String>, vehiculoPatente: String?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val detalleActual = repo.obtenerDetalleOt(otId)
+            val vehiculoActual = detalleActual?.ot?.vehiculoPatente
+            val patenteNormalizada = vehiculoPatente?.uppercase()?.takeIf { it.isNotBlank() }
+            var mensaje: String? = null
+            if (patenteNormalizada != null && patenteNormalizada != vehiculoActual) {
+                val ok = repo.actualizarVehiculoOt(otId, patenteNormalizada)
+                if (!ok) {
+                    mensaje = "No se pudo actualizar el vehículo. Verifica la patente o el estado de la OT."
+                }
+            }
+            repo.actualizarNotasOt(otId, notas)
+            repo.actualizarMecanicosOt(otId, mecanicosIds)
+            refreshOts()
+            actualizarDetalle(otId, mensaje ?: "Datos generales guardados")
+        }
+    }
+
+    fun guardarPresupuesto(otId: String, items: List<PresupuestoItem>, aprobado: Boolean, ivaPorc: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repo.guardarPresupuesto(otId, items, aprobado, ivaPorc)
+            refreshOts()
+            actualizarDetalle(otId, "Presupuesto actualizado")
+        }
+    }
+
+    fun guardarTareas(otId: String, tareas: List<TareaOt>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repo.guardarTareas(otId, tareas)
+            actualizarDetalle(otId, "Tareas actualizadas")
+        }
+    }
+
+    fun iniciarOt(otId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val detalle = repo.obtenerDetalleOt(otId)
+            if (detalle == null) {
+                _ui.update { it.copy(mensaje = "No se encontró la OT seleccionada") }
+                return@launch
+            }
+            val datosCompletos = detalle.cliente != null && detalle.vehiculo != null &&
+                detalle.ot.mecanicosAsignados.isNotEmpty() && detalle.presupuesto.items.isNotEmpty()
+            if (!detalle.presupuesto.aprobado || !datosCompletos) {
+                _ui.update {
+                    it.copy(
+                        mensaje = "Faltan datos críticos para iniciar la OT",
+                        detalleSeleccionado = detalle
+                    )
+                }
+                return@launch
+            }
+            val ok = repo.cambiarEstado(otId, OtState.EN_EJECUCION)
+            if (!ok) {
+                _ui.update { it.copy(mensaje = "No fue posible iniciar la OT") }
+            } else {
+                refreshOts()
+                actualizarDetalle(otId, "OT iniciada")
+            }
+        }
+    }
+
+    fun finalizarOt(otId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val ok = repo.cambiarEstado(otId, OtState.FINALIZADA)
+            if (!ok) {
+                _ui.update { it.copy(mensaje = "No fue posible finalizar la OT") }
+            } else {
+                refreshOts()
+                actualizarDetalle(otId, "OT finalizada")
+            }
         }
     }
 
@@ -287,20 +481,25 @@ class MainViewModel(
     fun aprobarPresupuesto(otId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             repo.aprobarPresupuesto(otId)
-            val currentResults = _ui.value.resultadosBusqueda
-            val updatedOt = currentResults.firstOrNull { it.id == otId }?.numero?.let { repo.buscarOtPorNumero(it) }
-            val refreshedResults = if (updatedOt != null) {
-                currentResults.map { if (it.id == otId) updatedOt else it }
+            val seleccionado = _ui.value.detalleSeleccionado?.ot?.id
+            if (seleccionado == otId) {
+                actualizarDetalle(otId, "Presupuesto aprobado")
             } else {
-                currentResults
-            }
-            val ots = repo.obtenerOts()
-            _ui.update {
-                it.copy(
-                    mensaje = "Presupuesto aprobado",
-                    resultadosBusqueda = refreshedResults,
-                    ots = ots
-                )
+                val currentResults = _ui.value.resultadosBusqueda
+                val updatedOt = currentResults.firstOrNull { it.id == otId }?.numero?.let { repo.buscarOtPorNumero(it) }
+                val refreshedResults = if (updatedOt != null) {
+                    currentResults.map { if (it.id == otId) updatedOt else it }
+                } else {
+                    currentResults
+                }
+                val ots = repo.obtenerOts()
+                _ui.update {
+                    it.copy(
+                        mensaje = "Presupuesto aprobado",
+                        resultadosBusqueda = refreshedResults,
+                        ots = ots
+                    )
+                }
             }
         }
     }
@@ -320,12 +519,17 @@ class MainViewModel(
                 currentResults
             }
             val ots = if (ok) repo.obtenerOts() else _ui.value.ots
-            _ui.update {
-                it.copy(
-                    mensaje = if (ok) "Estado actualizado" else "Transición inválida",
-                    resultadosBusqueda = resultados,
-                    ots = ots
-                )
+            val seleccionado = _ui.value.detalleSeleccionado?.ot?.id
+            if (ok && seleccionado == otId) {
+                actualizarDetalle(otId, "Estado actualizado")
+            } else {
+                _ui.update {
+                    it.copy(
+                        mensaje = if (ok) "Estado actualizado" else "Transición inválida",
+                        resultadosBusqueda = resultados,
+                        ots = ots
+                    )
+                }
             }
         }
     }
