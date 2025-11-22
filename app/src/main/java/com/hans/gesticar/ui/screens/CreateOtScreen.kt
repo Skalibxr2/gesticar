@@ -83,6 +83,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
     var nombre by rememberSaveable { mutableStateOf("") }
     var correo by rememberSaveable { mutableStateOf("") }
     var direccion by rememberSaveable { mutableStateOf("") }
+    var comuna by rememberSaveable { mutableStateOf("") }
     var telefono by rememberSaveable { mutableStateOf("") }
 
     var patente by rememberSaveable { mutableStateOf("") }
@@ -98,6 +99,9 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
     val items = remember { mutableStateListOf(PresupuestoItemForm()) }
     val seleccionMecanicos = remember { mutableStateListOf<String>() }
     var vehiculoSeleccionado by rememberSaveable { mutableStateOf<String?>(null) }
+    var detallesClienteExpandido by rememberSaveable { mutableStateOf(false) }
+    var modoEdicionCliente by rememberSaveable { mutableStateOf(false) }
+    var creandoCliente by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(uiState.exito) {
         if (uiState.exito) {
@@ -105,6 +109,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             nombre = ""
             correo = ""
             direccion = ""
+            comuna = ""
             telefono = ""
             patente = ""
             marca = ""
@@ -115,6 +120,9 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             combustible = ""
             sintomas = ""
             presupuestoAprobado = false
+            detallesClienteExpandido = false
+            modoEdicionCliente = false
+            creandoCliente = false
             seleccionMecanicos.clear()
             vehiculoSeleccionado = null
             items.clear()
@@ -129,22 +137,38 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
 
     val rutValido = isRutValid(rutSanitized)
     val rutNormalizado = if (rutValido) normalizeRut(rutSanitized) else null
+    val clienteEncontrado = rutNormalizado != null && uiState.cliente?.rut == rutNormalizado
 
     LaunchedEffect(rutNormalizado) {
-        rutNormalizado?.let { vm.buscarClientePorRut(it) }
+        modoEdicionCliente = false
+        detallesClienteExpandido = false
+        if (rutNormalizado == null) {
+            creandoCliente = false
+        } else {
+            vm.buscarClientePorRut(rutNormalizado)
+        }
     }
 
-    LaunchedEffect(uiState.cliente?.rut, rutNormalizado) {
+    LaunchedEffect(clienteEncontrado) {
+        if (clienteEncontrado) {
+            modoEdicionCliente = false
+            creandoCliente = false
+        }
+    }
+
+    LaunchedEffect(uiState.cliente?.rut, rutNormalizado, creandoCliente) {
         val cliente = uiState.cliente
         if (cliente != null && rutNormalizado == normalizeRut(cliente.rut)) {
             nombre = cliente.nombre
             correo = cliente.correo.orEmpty()
             direccion = cliente.direccion.orEmpty()
+            comuna = cliente.comuna.orEmpty()
             telefono = cliente.telefono.orEmpty()
-        } else if (rutNormalizado == null || cliente == null) {
+        } else if ((rutNormalizado == null || cliente == null) && !creandoCliente) {
             nombre = ""
             correo = ""
             direccion = ""
+            comuna = ""
             telefono = ""
         }
     }
@@ -213,6 +237,8 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             Text("Guardando...", style = MaterialTheme.typography.bodySmall)
         }
 
+        val camposClienteEditables = (clienteEncontrado && modoEdicionCliente) || (!clienteEncontrado && creandoCliente)
+
         ClienteSection(
             rut = formatRutInput(rutSanitized),
             onRutChange = { rutSanitized = sanitizeRutInput(it) },
@@ -224,8 +250,24 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             onCorreoChange = { correo = it },
             direccion = direccion,
             onDireccionChange = { direccion = it },
+            comuna = comuna,
+            onComunaChange = { comuna = it },
             telefono = telefono,
             onTelefonoChange = { telefono = it },
+            detallesExpandido = detallesClienteExpandido,
+            onToggleDetalles = { detallesClienteExpandido = !detallesClienteExpandido },
+            camposHabilitados = camposClienteEditables,
+            clienteEncontrado = clienteEncontrado,
+            creandoCliente = creandoCliente,
+            onModificarCliente = {
+                modoEdicionCliente = true
+                detallesClienteExpandido = true
+            },
+            onIniciarCreacion = {
+                creandoCliente = true
+                modoEdicionCliente = true
+                detallesClienteExpandido = true
+            },
             onGuardarCliente = {
                 if (rutNormalizado != null && nombre.isNotBlank()) {
                     vm.guardarCliente(
@@ -234,6 +276,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
                             nombre = nombre,
                             correo = correo.takeIf { it.isNotBlank() },
                             direccion = direccion.takeIf { it.isNotBlank() },
+                            comuna = comuna.takeIf { it.isNotBlank() },
                             telefono = telefono.takeIf { it.isNotBlank() }
                         )
                     )
@@ -344,6 +387,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
                         nombre = nombre,
                         correo = correo.takeIf { it.isNotBlank() },
                         direccion = direccion.takeIf { it.isNotBlank() },
+                        comuna = comuna.takeIf { it.isNotBlank() },
                         telefono = telefono.takeIf { it.isNotBlank() }
                     )
                     val vehiculo = Vehiculo(
@@ -380,6 +424,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
                         nombre = nombre,
                         correo = correo.takeIf { it.isNotBlank() },
                         direccion = direccion.takeIf { it.isNotBlank() },
+                        comuna = comuna.takeIf { it.isNotBlank() },
                         telefono = telefono.takeIf { it.isNotBlank() }
                     )
                     val vehiculo = Vehiculo(
@@ -432,12 +477,25 @@ private fun ClienteSection(
     onCorreoChange: (String) -> Unit,
     direccion: String,
     onDireccionChange: (String) -> Unit,
+    comuna: String,
+    onComunaChange: (String) -> Unit,
     telefono: String,
     onTelefonoChange: (String) -> Unit,
+    detallesExpandido: Boolean,
+    onToggleDetalles: () -> Unit,
+    camposHabilitados: Boolean,
+    clienteEncontrado: Boolean,
+    creandoCliente: Boolean,
+    onModificarCliente: () -> Unit,
+    onIniciarCreacion: () -> Unit,
     onGuardarCliente: () -> Unit,
     guardandoCliente: Boolean,
-    mensajeCliente: String?
+    mensajeCliente: String?,
 ) {
+    val mensajeEsError = mensajeCliente?.contains("error", ignoreCase = true) == true
+    val textoAccion = if (clienteEncontrado) "Guardar cambios" else "Crear cliente"
+    val puedeGuardar = camposHabilitados && rutValido && nombre.isNotBlank() && !guardandoCliente
+
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Datos del cliente", style = MaterialTheme.typography.titleMedium)
@@ -447,50 +505,93 @@ private fun ClienteSection(
                 label = { Text("RUT") },
                 modifier = Modifier.fillMaxWidth(),
                 isError = mostrarRutInvalido,
+                enabled = !guardandoCliente,
+                readOnly = clienteEncontrado && camposHabilitados,
                 supportingText = {
                     when {
                         guardandoCliente -> Text("Guardando cliente...")
                         mostrarRutInvalido -> Text("Ingresa un RUT válido con dígito verificador")
-                        mensajeCliente != null -> {
-                            val esError = mensajeCliente.contains("error", ignoreCase = true)
-                            Text(
-                                mensajeCliente,
-                                color = if (esError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                            )
-                        }
+                        mensajeCliente != null -> Text(
+                            mensajeCliente,
+                            color = if (mensajeEsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             )
             OutlinedTextField(
                 value = nombre,
                 onValueChange = onNombreChange,
-                label = { Text("Nombre") },
-                modifier = Modifier.fillMaxWidth()
+                label = { Text("Nombre del cliente") },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = camposHabilitados,
+                readOnly = !camposHabilitados
             )
-            OutlinedTextField(
-                value = correo,
-                onValueChange = onCorreoChange,
-                label = { Text("Correo") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = direccion,
-                onValueChange = onDireccionChange,
-                label = { Text("Dirección") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = telefono,
-                onValueChange = onTelefonoChange,
-                label = { Text("Teléfono") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Button(
-                onClick = onGuardarCliente,
-                enabled = rutValido && nombre.isNotBlank() && !guardandoCliente,
-                modifier = Modifier.align(Alignment.End)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Guardar cliente")
+                TextButton(onClick = onToggleDetalles) {
+                    Text(if (detallesExpandido) "Ocultar detalles" else "Ver más detalles")
+                }
+
+                when {
+                    clienteEncontrado && !camposHabilitados -> {
+                        Button(onClick = onModificarCliente, enabled = !guardandoCliente) {
+                            Text("Modificar cliente")
+                        }
+                    }
+
+                    !clienteEncontrado && !creandoCliente -> {
+                        Button(onClick = onIniciarCreacion, enabled = rutValido && !guardandoCliente) {
+                            Text("Crear cliente")
+                        }
+                    }
+
+                    camposHabilitados -> {
+                        Button(onClick = onGuardarCliente, enabled = puedeGuardar) {
+                            Text(textoAccion)
+                        }
+                    }
+                }
+            }
+
+            if (detallesExpandido) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = correo,
+                        onValueChange = onCorreoChange,
+                        label = { Text("Correo") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = camposHabilitados,
+                        readOnly = !camposHabilitados
+                    )
+                    OutlinedTextField(
+                        value = telefono,
+                        onValueChange = onTelefonoChange,
+                        label = { Text("Teléfono") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = camposHabilitados,
+                        readOnly = !camposHabilitados
+                    )
+                    OutlinedTextField(
+                        value = direccion,
+                        onValueChange = onDireccionChange,
+                        label = { Text("Dirección") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = camposHabilitados,
+                        readOnly = !camposHabilitados
+                    )
+                    OutlinedTextField(
+                        value = comuna,
+                        onValueChange = onComunaChange,
+                        label = { Text("Comuna") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = camposHabilitados,
+                        readOnly = !camposHabilitados
+                    )
+                }
             }
         }
     }
