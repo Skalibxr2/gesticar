@@ -13,6 +13,8 @@ import com.hans.gesticar.model.OtState
 import com.hans.gesticar.model.Presupuesto
 import com.hans.gesticar.model.PresupuestoItem
 import com.hans.gesticar.model.Rol
+import com.hans.gesticar.model.SintomaInput
+import com.hans.gesticar.model.SintomaOt
 import com.hans.gesticar.model.TareaOt
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
@@ -77,6 +79,29 @@ class SqliteRepository(context: Context) : Repository {
             )
             db.execSQL(
                 """
+                CREATE TABLE ot_sintomas (
+                    id TEXT PRIMARY KEY,
+                    ot_id TEXT NOT NULL,
+                    descripcion TEXT NOT NULL,
+                    registrado_en INTEGER,
+                    FOREIGN KEY (ot_id) REFERENCES ots(id)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                CREATE TABLE ot_sintoma_fotos (
+                    id TEXT PRIMARY KEY,
+                    ot_id TEXT NOT NULL,
+                    sintoma_id TEXT NOT NULL,
+                    uri TEXT NOT NULL,
+                    FOREIGN KEY (ot_id) REFERENCES ots(id),
+                    FOREIGN KEY (sintoma_id) REFERENCES ot_sintomas(id)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
                 CREATE TABLE presupuestos (
                     ot_id TEXT PRIMARY KEY,
                     aprobado INTEGER NOT NULL DEFAULT 0,
@@ -136,6 +161,8 @@ class SqliteRepository(context: Context) : Repository {
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+            db.execSQL("DROP TABLE IF EXISTS ot_sintoma_fotos")
+            db.execSQL("DROP TABLE IF EXISTS ot_sintomas")
             db.execSQL("DROP TABLE IF EXISTS ot_tareas")
             db.execSQL("DROP TABLE IF EXISTS ot_mecanicos")
             db.execSQL("DROP TABLE IF EXISTS audit_logs")
@@ -151,6 +178,69 @@ class SqliteRepository(context: Context) : Repository {
 
     init {
         seedIfNeeded()
+    }
+
+    private fun insertarSintomas(db: SQLiteDatabase, otId: String, sintomas: List<SintomaInput>) {
+        db.delete("ot_sintomas", "ot_id = ?", arrayOf(otId))
+        db.delete("ot_sintoma_fotos", "ot_id = ?", arrayOf(otId))
+        sintomas.forEach { sintoma ->
+            val sintomaId = UUID.randomUUID().toString()
+            db.insert(
+                "ot_sintomas",
+                null,
+                ContentValues().apply {
+                    put("id", sintomaId)
+                    put("ot_id", otId)
+                    put("descripcion", sintoma.descripcion)
+                    put("registrado_en", sintoma.registradoEn)
+                }
+            )
+            sintoma.fotos.forEach { uri ->
+                db.insert(
+                    "ot_sintoma_fotos",
+                    null,
+                    ContentValues().apply {
+                        put("id", UUID.randomUUID().toString())
+                        put("ot_id", otId)
+                        put("sintoma_id", sintomaId)
+                        put("uri", uri)
+                    }
+                )
+            }
+        }
+    }
+
+    private fun obtenerSintomasInterno(db: SQLiteDatabase, otId: String): List<SintomaOt> {
+        val fotosPorSintoma = mutableMapOf<String, MutableList<String>>()
+        db.rawQuery(
+            "SELECT sintoma_id, uri FROM ot_sintoma_fotos WHERE ot_id = ?",
+            arrayOf(otId)
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val sintomaId = cursor.getString(0)
+                val uri = cursor.getString(1)
+                fotosPorSintoma.getOrPut(sintomaId) { mutableListOf() }.add(uri)
+            }
+        }
+
+        val cursor = db.rawQuery(
+            "SELECT id, descripcion, registrado_en FROM ot_sintomas WHERE ot_id = ?",
+            arrayOf(otId)
+        )
+        cursor.use {
+            val list = ArrayList<SintomaOt>(it.count.coerceAtLeast(0))
+            while (it.moveToNext()) {
+                val sintomaId = it.getString(0)
+                list += SintomaOt(
+                    id = sintomaId,
+                    otId = otId,
+                    descripcion = it.getString(1),
+                    registradoEn = if (it.isNull(2)) null else it.getLong(2),
+                    fotos = fotosPorSintoma[sintomaId]?.toList() ?: emptyList()
+                )
+            }
+            return list
+        }
     }
 
     private fun seedIfNeeded() {
@@ -265,6 +355,18 @@ class SqliteRepository(context: Context) : Repository {
                         put("estado", OtState.BORRADOR.name)
                         put("notas", "Ruidos en tren delantero")
                         put("creada_en", createdAt)
+                    }
+                )
+
+                val sintomaId = UUID.randomUUID().toString()
+                db.insertOrThrow(
+                    "ot_sintomas",
+                    null,
+                    ContentValues().apply {
+                        put("id", sintomaId)
+                        put("ot_id", otId)
+                        put("descripcion", "Ruidos en tren delantero")
+                        put("registrado_en", createdAt)
                     }
                 )
 
@@ -469,13 +571,15 @@ class SqliteRepository(context: Context) : Repository {
             }
             val presupuesto = obtenerPresupuesto(db, otId)
             val tareas = obtenerTareas(db, otId)
+            val sintomas = obtenerSintomasInterno(db, otId)
             return OtDetalle(
                 ot = ot,
                 cliente = cliente,
                 vehiculo = vehiculo,
                 mecanicosAsignados = mecanicos,
                 presupuesto = presupuesto,
-                tareas = tareas
+                tareas = tareas,
+                sintomas = sintomas
             )
         }
     }
@@ -711,13 +815,18 @@ class SqliteRepository(context: Context) : Repository {
         }
     }
 
+    override suspend fun obtenerSintomas(otId: String): List<SintomaOt> {
+        val db = helper.readableDatabase
+        return obtenerSintomasInterno(db, otId)
+    }
+
     override suspend fun crearOt(
         cliente: Cliente,
         vehiculo: Vehiculo,
         mecanicosIds: List<String>,
         presupuestoItems: List<PresupuestoItem>,
         presupuestoAprobado: Boolean,
-        sintomas: String?
+        sintomas: List<SintomaInput>
     ): Ot {
         val db = helper.writableDatabase
         db.beginTransaction()
@@ -746,7 +855,7 @@ class SqliteRepository(context: Context) : Repository {
                     put("numero", numero)
                     put("vehiculo_patente", patente)
                     put("estado", OtState.BORRADOR.name)
-                    put("notas", sintomas)
+                    put("notas", null as String?)
                     put("creada_en", createdAt)
                 }
             )
@@ -795,6 +904,8 @@ class SqliteRepository(context: Context) : Repository {
                 insertAudit(db, otId, "PRESUPUESTO_APROBADO")
             }
 
+            insertarSintomas(db, otId, sintomas)
+
             db.setTransactionSuccessful()
             return Ot(
                 id = otId,
@@ -802,7 +913,7 @@ class SqliteRepository(context: Context) : Repository {
                 vehiculoPatente = patente,
                 estado = OtState.BORRADOR,
                 mecanicosAsignados = mecanicosIds.distinct(),
-                notas = sintomas,
+                notas = null,
                 fechaCreacion = createdAt
             )
         } finally {

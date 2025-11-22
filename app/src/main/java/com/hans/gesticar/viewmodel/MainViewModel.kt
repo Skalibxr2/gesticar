@@ -8,6 +8,7 @@ import com.hans.gesticar.model.OtDetalle
 import com.hans.gesticar.model.OtState
 import com.hans.gesticar.model.PresupuestoItem
 import com.hans.gesticar.model.Rol
+import com.hans.gesticar.model.SintomaInput
 import com.hans.gesticar.model.TareaOt
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
@@ -317,7 +318,7 @@ class MainViewModel(
         mecanicosIds: List<String>,
         presupuestoItems: List<PresupuestoItem>,
         presupuestoAprobado: Boolean,
-        sintomas: String?,
+        sintomas: List<SintomaInput>,
         iniciar: Boolean
     ) {
         viewModelScope.launch(Dispatchers.IO) {

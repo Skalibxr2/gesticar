@@ -1,6 +1,11 @@
 package com.hans.gesticar.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,12 +13,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
@@ -27,6 +38,7 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
@@ -44,14 +56,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.hans.gesticar.model.Cliente
 import com.hans.gesticar.model.ItemTipo
 import com.hans.gesticar.model.PresupuestoItem
+import com.hans.gesticar.model.SintomaInput
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
 import com.hans.gesticar.ui.Routes
@@ -61,6 +76,9 @@ import com.hans.gesticar.util.formatRutInput
 import com.hans.gesticar.util.isRutValid
 import com.hans.gesticar.util.normalizeRut
 import com.hans.gesticar.util.sanitizeRutInput
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 private class PresupuestoItemForm(
     tipo: ItemTipo = ItemTipo.MO,
@@ -72,6 +90,16 @@ private class PresupuestoItemForm(
     var descripcion by mutableStateOf(descripcion)
     var cantidad by mutableStateOf(cantidad)
     var precioUnitario by mutableStateOf(precioUnitario)
+}
+
+private class SymptomForm(
+    descripcion: String = "",
+    fechaTexto: String = "",
+    fotos: MutableList<Uri> = mutableStateListOf()
+) {
+    var descripcion by mutableStateOf(descripcion)
+    var fechaTexto by mutableStateOf(fechaTexto)
+    val fotos = fotos
 }
 
 @Composable
@@ -96,18 +124,12 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
     var color by rememberSaveable { mutableStateOf("") }
     var kilometraje by rememberSaveable { mutableStateOf("") }
     var combustible by rememberSaveable { mutableStateOf("") }
-    var sintomas by rememberSaveable { mutableStateOf("") }
 
     var presupuestoAprobado by rememberSaveable { mutableStateOf(false) }
     val items = remember { mutableStateListOf(PresupuestoItemForm()) }
     val seleccionMecanicos = remember { mutableStateListOf<String>() }
     var vehiculoSeleccionado by rememberSaveable { mutableStateOf<String?>(null) }
-    var mostrarFormularioVehiculo by rememberSaveable { mutableStateOf(false) }
-    var esEdicionVehiculo by rememberSaveable { mutableStateOf(false) }
-    var flujoNuevoVehiculo by rememberSaveable { mutableStateOf(false) }
-    var patenteBusqueda by rememberSaveable { mutableStateOf("") }
-    var vehiculoInfoDialog by remember { mutableStateOf<Vehiculo?>(null) }
-    var mostrarConfirmarCancelarRegistro by rememberSaveable { mutableStateOf(false) }
+    val sintomas = remember { mutableStateListOf(SymptomForm()) }
 
     LaunchedEffect(uiState.exito) {
         if (uiState.exito) {
@@ -124,7 +146,6 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             color = ""
             kilometraje = ""
             combustible = ""
-            sintomas = ""
             presupuestoAprobado = false
             detallesClienteExpandido = false
             modoEdicionCliente = false
@@ -133,6 +154,8 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             vehiculoSeleccionado = null
             items.clear()
             items += PresupuestoItemForm()
+            sintomas.clear()
+            sintomas += SymptomForm()
         }
     }
 
@@ -320,8 +343,6 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             onKilometrajeChange = { kilometraje = it.filter { ch -> ch.isDigit() } },
             combustible = combustible,
             onCombustibleChange = { combustible = it },
-            sintomas = sintomas,
-            onSintomasChange = { sintomas = it },
             vehiculos = if (rutNormalizado == uiState.cliente?.rut) uiState.vehiculosCliente else emptyList(),
             vehiculoSeleccionado = vehiculoSeleccionado,
             onSeleccionarVehiculo = { vehiculo ->
@@ -449,28 +470,11 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             }
         )
 
-        vehiculoInfoDialog?.let { vehiculo ->
-            AlertDialog(
-                onDismissRequest = { vehiculoInfoDialog = null },
-                confirmButton = {
-                    TextButton(onClick = { vehiculoInfoDialog = null }) {
-                        Text("Cerrar")
-                    }
-                },
-                title = { Text("Información del vehículo") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Patente: ${vehiculo.patente}")
-                        Text("Marca: ${vehiculo.marca}")
-                        Text("Modelo: ${vehiculo.modelo}")
-                        Text("Año: ${vehiculo.anio}")
-                        vehiculo.color?.let { Text("Color: $it") }
-                        vehiculo.kilometraje?.let { Text("Kilometraje: ${it} km") }
-                        vehiculo.combustible?.let { Text("Combustible: $it") }
-                    }
-                }
-            )
-        }
+        SymptomsSection(
+            sintomas = sintomas,
+            onAgregarSintoma = { sintomas += SymptomForm() },
+            onEliminarSintoma = { index -> if (sintomas.size > 1) sintomas.removeAt(index) }
+        )
 
         MecanicosSection(
             mecanicos = uiState.mecanicos,
@@ -507,6 +511,15 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
                 )
             }
         }
+        val sintomasValidos = sintomas.mapNotNull { form ->
+            if (form.descripcion.isBlank()) return@mapNotNull null
+            val timestamp = parseSymptomTimestamp(form.fechaTexto)
+            SintomaInput(
+                descripcion = form.descripcion,
+                registradoEn = timestamp,
+                fotos = form.fotos.map(Uri::toString)
+            )
+        }
         val puedeGuardar = clienteValido && vehiculoValido && !uiState.guardando
         val puedeIniciar = puedeGuardar && presupuestoAprobado && presupuestoItemsValidos.isNotEmpty()
 
@@ -539,7 +552,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
                         mecanicosIds = seleccionMecanicos.toList(),
                         presupuestoItems = presupuestoItemsValidos,
                         presupuestoAprobado = presupuestoAprobado,
-                        sintomas = sintomas.takeIf { it.isNotBlank() },
+                        sintomas = sintomasValidos,
                         iniciar = false
                     )
                 },
@@ -576,7 +589,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
                         mecanicosIds = seleccionMecanicos.toList(),
                         presupuestoItems = presupuestoItemsValidos,
                         presupuestoAprobado = true,
-                        sintomas = sintomas.takeIf { it.isNotBlank() },
+                        sintomas = sintomasValidos,
                         iniciar = true
                     )
                 },
@@ -731,6 +744,106 @@ private fun ClienteSection(
 }
 
 @Composable
+private fun SymptomsSection(
+    sintomas: List<SymptomForm>,
+    onAgregarSintoma: () -> Unit,
+    onEliminarSintoma: (Int) -> Unit
+) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Síntomas del vehículo", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = "Agrega cada síntoma por separado con su fecha opcional y adjunta las fotos correspondientes.",
+                style = MaterialTheme.typography.bodySmall
+            )
+            sintomas.forEachIndexed { index, sintoma ->
+                SymptomCard(
+                    indice = index + 1,
+                    sintoma = sintoma,
+                    onRemove = if (sintomas.size > 1) {
+                        { onEliminarSintoma(index) }
+                    } else {
+                        null
+                    }
+                )
+                if (index < sintomas.lastIndex) {
+                    Divider()
+                }
+            }
+            Button(onClick = onAgregarSintoma, modifier = Modifier.align(Alignment.End)) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Agregar síntoma")
+            }
+        }
+    }
+}
+
+@Composable
+private fun SymptomCard(indice: Int, sintoma: SymptomForm, onRemove: (() -> Unit)?) {
+    val pickGallery = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
+        uris.forEach { uri ->
+            if (uri !in sintoma.fotos) {
+                sintoma.fotos.add(uri)
+            }
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Síntoma #$indice", style = MaterialTheme.typography.labelLarge)
+            Spacer(modifier = Modifier.weight(1f))
+            if (onRemove != null) {
+                IconButton(onClick = onRemove) {
+                    Icon(Icons.Default.Delete, contentDescription = "Eliminar síntoma")
+                }
+            }
+        }
+        OutlinedTextField(
+            value = sintoma.descripcion,
+            onValueChange = { sintoma.descripcion = it },
+            label = { Text("Descripción del síntoma") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        OutlinedTextField(
+            value = sintoma.fechaTexto,
+            onValueChange = { sintoma.fechaTexto = it },
+            label = { Text("Fecha u hora (opcional)") },
+            supportingText = { Text("Formato sugerido: 2024-05-01 09:30") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(onClick = {
+                pickGallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            }) {
+                Icon(imageVector = Icons.Default.Collections, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Galería")
+            }
+        }
+        if (sintoma.fotos.isNotEmpty()) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(sintoma.fotos) { uri ->
+                    Box {
+                        AsyncImage(
+                            model = uri,
+                            contentDescription = "Foto de síntoma",
+                            modifier = Modifier.size(96.dp),
+                            contentScale = ContentScale.Crop
+                        )
+                        IconButton(onClick = {
+                            sintoma.fotos.remove(uri)
+                        }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Eliminar foto")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun VehiculoSection(
     rutCliente: String?,
     patente: String,
@@ -747,8 +860,6 @@ private fun VehiculoSection(
     onKilometrajeChange: (String) -> Unit,
     combustible: String,
     onCombustibleChange: (String) -> Unit,
-    sintomas: String,
-    onSintomasChange: (String) -> Unit,
     vehiculos: List<Vehiculo>,
     vehiculoSeleccionado: String?,
     onSeleccionarVehiculo: (Vehiculo?) -> Unit,
@@ -914,76 +1025,13 @@ private fun VehiculoSection(
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold
                 )
-                OutlinedTextField(
-                    value = patente,
-                    onValueChange = onPatenteChange,
-                    label = { Text("Patente") },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !patenteSoloLectura
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = marca,
-                        onValueChange = onMarcaChange,
-                        label = { Text("Marca") },
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = modelo,
-                        onValueChange = onModeloChange,
-                        label = { Text("Modelo") },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = anio,
-                        onValueChange = onAnioChange,
-                        label = { Text("Año") },
-                        modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
-                    OutlinedTextField(
-                        value = color,
-                        onValueChange = onColorChange,
-                        label = { Text("Color") },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = kilometraje,
-                        onValueChange = onKilometrajeChange,
-                        label = { Text("Kilometraje") },
-                        modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
-                    OutlinedTextField(
-                        value = combustible,
-                        onValueChange = onCombustibleChange,
-                        label = { Text("Combustible") },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    TextButton(onClick = onCancelarEdicion) {
-                        Text(if (flujoNuevoVehiculo) "Cancelar" else "Cancelar cambios")
-                    }
-                    Button(
-                        onClick = onGuardarVehiculo,
-                        enabled = !guardandoVehiculo
-                    ) {
-                        Text(if (esEdicion) "Guardar cambios" else "Agregar vehículo")
-                    }
-                }
-            }
-
             OutlinedTextField(
-                value = sintomas,
-                onValueChange = onSintomasChange,
-                label = { Text("Síntomas entregados por el cliente") },
-                modifier = Modifier.fillMaxWidth()
+                value = combustible,
+                onValueChange = onCombustibleChange,
+                label = { Text("Combustible") },
+                modifier = Modifier.weight(1f)
             )
+        }
             VehiclePhotosSection(
                 receptionTitle = "Fotos al recibir el vehículo",
                 completionTitle = "Fotos de avance o entrega"
@@ -1155,4 +1203,15 @@ private fun PresupuestoItemRow(
             )
         }
     }
+}
+
+private fun parseSymptomTimestamp(input: String): Long? {
+    if (input.isBlank()) return null
+    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+    return runCatching {
+        LocalDateTime.parse(input.trim(), formatter)
+            .atZone(ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli()
+    }.getOrNull()
 }
