@@ -24,7 +24,10 @@ interface Repository {
     suspend fun buscarClientePorRut(rut: String): Cliente?
     suspend fun guardarCliente(cliente: Cliente)
     suspend fun obtenerVehiculosPorRut(rut: String): List<Vehiculo>
+    suspend fun buscarVehiculoPorPatente(patente: String): Vehiculo?
     suspend fun guardarVehiculo(vehiculo: Vehiculo)
+    suspend fun desasociarVehiculo(patente: String)
+    suspend fun actualizarClienteVehiculo(patente: String, clienteRut: String): Vehiculo?
     suspend fun actualizarNotasOt(otId: String, notas: String?)
     suspend fun actualizarMecanicosOt(otId: String, mecanicosIds: List<String>)
     suspend fun actualizarVehiculoOt(otId: String, patente: String): Boolean

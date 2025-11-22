@@ -53,6 +53,9 @@ data class CreateOtUiState(
     val exito: Boolean = false,
     val cliente: Cliente? = null,
     val vehiculosCliente: List<Vehiculo> = emptyList(),
+    val vehiculoBuscado: Vehiculo? = null,
+    val mensajeBusquedaVehiculo: String? = null,
+    val buscandoVehiculo: Boolean = false,
     val guardandoCliente: Boolean = false,
     val mensajeCliente: String? = null,
     val guardandoVehiculo: Boolean = false,
@@ -146,6 +149,9 @@ class MainViewModel(
                     exito = false,
                     cliente = null,
                     vehiculosCliente = emptyList(),
+                    vehiculoBuscado = null,
+                    mensajeBusquedaVehiculo = null,
+                    buscandoVehiculo = false,
                     guardandoCliente = false,
                     mensajeCliente = null,
                     guardandoVehiculo = false,
@@ -163,7 +169,10 @@ class MainViewModel(
                 it.copy(
                     cliente = cliente,
                     vehiculosCliente = vehiculos,
-                    mensajeCliente = if (cliente != null) "Cliente encontrado" else "Cliente no encontrado",
+                    mensajeCliente = if (cliente != null) "Cliente encontrado" else "Cliente no registrado",
+                    vehiculoBuscado = null,
+                    mensajeBusquedaVehiculo = null,
+                    buscandoVehiculo = false,
                     guardandoCliente = false,
                     guardandoVehiculo = false,
                     mensajeVehiculo = null
@@ -220,6 +229,85 @@ class MainViewModel(
                     )
                 }
             }
+        }
+    }
+
+    fun buscarVehiculoPorPatente(patente: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _createOtUi.update {
+                it.copy(
+                    buscandoVehiculo = true,
+                    vehiculoBuscado = null,
+                    mensajeBusquedaVehiculo = null,
+                    mensajeVehiculo = null
+                )
+            }
+            val encontrado = repo.buscarVehiculoPorPatente(patente)
+            _createOtUi.update {
+                it.copy(
+                    buscandoVehiculo = false,
+                    vehiculoBuscado = encontrado,
+                    mensajeBusquedaVehiculo = if (encontrado != null) "Patente encontrada" else "Patente no existe en el sistema"
+                )
+            }
+        }
+    }
+
+    fun desasociarVehiculoDeCliente(patente: String, clienteRut: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                repo.desasociarVehiculo(patente)
+                val vehiculos = repo.obtenerVehiculosPorRut(clienteRut)
+                _createOtUi.update {
+                    it.copy(
+                        vehiculosCliente = vehiculos,
+                        mensajeVehiculo = "Vehículo desvinculado del cliente"
+                    )
+                }
+            } catch (e: Exception) {
+                _createOtUi.update {
+                    it.copy(mensajeVehiculo = e.message ?: "Error al desvincular el vehículo")
+                }
+            }
+        }
+    }
+
+    fun reasignarVehiculoACliente(patente: String, clienteRut: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                repo.actualizarClienteVehiculo(patente, clienteRut)
+                val vehiculos = repo.obtenerVehiculosPorRut(clienteRut)
+                _createOtUi.update {
+                    it.copy(
+                        vehiculosCliente = vehiculos,
+                        mensajeVehiculo = "Vehículo asociado al cliente",
+                        vehiculoBuscado = null,
+                        mensajeBusquedaVehiculo = null
+                    )
+                }
+            } catch (e: Exception) {
+                _createOtUi.update {
+                    it.copy(mensajeVehiculo = e.message ?: "Error al actualizar la asociación del vehículo")
+                }
+            }
+        }
+    }
+
+    fun limpiarMensajesVehiculo() {
+        _createOtUi.update { it.copy(mensajeVehiculo = null) }
+    }
+
+    fun reportarMensajeVehiculo(mensaje: String) {
+        _createOtUi.update { it.copy(mensajeVehiculo = mensaje) }
+    }
+
+    fun limpiarBusquedaVehiculo() {
+        _createOtUi.update {
+            it.copy(
+                vehiculoBuscado = null,
+                mensajeBusquedaVehiculo = null,
+                buscandoVehiculo = false
+            )
         }
     }
 

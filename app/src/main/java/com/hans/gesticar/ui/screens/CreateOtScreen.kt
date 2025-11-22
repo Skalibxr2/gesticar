@@ -15,6 +15,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
@@ -99,9 +102,12 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
     val items = remember { mutableStateListOf(PresupuestoItemForm()) }
     val seleccionMecanicos = remember { mutableStateListOf<String>() }
     var vehiculoSeleccionado by rememberSaveable { mutableStateOf<String?>(null) }
-    var detallesClienteExpandido by rememberSaveable { mutableStateOf(false) }
-    var modoEdicionCliente by rememberSaveable { mutableStateOf(false) }
-    var creandoCliente by rememberSaveable { mutableStateOf(false) }
+    var mostrarFormularioVehiculo by rememberSaveable { mutableStateOf(false) }
+    var esEdicionVehiculo by rememberSaveable { mutableStateOf(false) }
+    var flujoNuevoVehiculo by rememberSaveable { mutableStateOf(false) }
+    var patenteBusqueda by rememberSaveable { mutableStateOf("") }
+    var vehiculoInfoDialog by remember { mutableStateOf<Vehiculo?>(null) }
+    var mostrarConfirmarCancelarRegistro by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(uiState.exito) {
         if (uiState.exito) {
@@ -207,6 +213,18 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
         }
     }
 
+    LaunchedEffect(uiState.guardandoVehiculo, uiState.mensajeVehiculo) {
+        if (!uiState.guardandoVehiculo && uiState.mensajeVehiculo != null &&
+            !uiState.mensajeVehiculo.contains("error", ignoreCase = true)
+        ) {
+            mostrarFormularioVehiculo = false
+            esEdicionVehiculo = false
+            flujoNuevoVehiculo = false
+            patenteBusqueda = ""
+            vm.limpiarBusquedaVehiculo()
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -287,6 +305,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
         )
 
         VehiculoSection(
+            rutCliente = rutNormalizado,
             patente = patente,
             onPatenteChange = { patente = it.uppercase() },
             marca = marca,
@@ -305,9 +324,108 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             onSintomasChange = { sintomas = it },
             vehiculos = if (rutNormalizado == uiState.cliente?.rut) uiState.vehiculosCliente else emptyList(),
             vehiculoSeleccionado = vehiculoSeleccionado,
-            onSeleccionarVehiculo = { vehiculo -> vehiculoSeleccionado = vehiculo?.patente },
-            onCrearNuevoVehiculo = {
-                vehiculoSeleccionado = null
+            onSeleccionarVehiculo = { vehiculo ->
+                vehiculoSeleccionado = vehiculo?.patente
+                mostrarFormularioVehiculo = false
+                esEdicionVehiculo = false
+                flujoNuevoVehiculo = false
+            },
+            onGuardarVehiculo = {
+                val errores = mutableListOf<String>()
+                val anioInt = anio.toIntOrNull()
+                val kmInt = kilometraje.toIntOrNull()
+                if (rutNormalizado == null) errores += "cliente"
+                if (patente.isBlank()) errores += "patente"
+                if (marca.isBlank()) errores += "marca"
+                if (modelo.isBlank()) errores += "modelo"
+                if (anio.length != 4 || anioInt == null) errores += "año"
+                if (flujoNuevoVehiculo && kilometraje.isBlank()) errores += "kilometraje"
+                if (kilometraje.isNotBlank() && kmInt == null) errores += "kilometraje numérico"
+                if (errores.isNotEmpty()) {
+                    vm.reportarMensajeVehiculo("Completa correctamente: ${errores.joinToString(", ")}")
+                    return@VehiculoSection
+                }
+                val vehiculo = Vehiculo(
+                    patente = patente.uppercase(),
+                    clienteRut = rutNormalizado ?: "",
+                    marca = marca,
+                    modelo = modelo,
+                    anio = anioInt ?: 0,
+                    color = color.takeIf { it.isNotBlank() },
+                    kilometraje = if (kilometraje.isBlank()) null else kmInt,
+                    combustible = combustible.takeIf { it.isNotBlank() }
+                )
+                vm.guardarVehiculo(vehiculo)
+                vehiculoSeleccionado = vehiculo.patente.uppercase()
+            },
+            guardandoVehiculo = uiState.guardandoVehiculo,
+            mensajeVehiculo = uiState.mensajeVehiculo,
+            mostrarFormulario = mostrarFormularioVehiculo,
+            esEdicion = esEdicionVehiculo,
+            flujoNuevoVehiculo = flujoNuevoVehiculo,
+            patenteBusqueda = patenteBusqueda,
+            onPatenteBusquedaChange = { patenteBusqueda = it.uppercase() },
+            onBuscarPatente = {
+                vm.buscarVehiculoPorPatente(patenteBusqueda.uppercase())
+                patente = patenteBusqueda.uppercase()
+            },
+            vehiculoBuscado = uiState.vehiculoBuscado,
+            mensajeBusquedaVehiculo = uiState.mensajeBusquedaVehiculo,
+            buscandoVehiculo = uiState.buscandoVehiculo,
+            onMostrarFormularioNuevo = {
+                flujoNuevoVehiculo = true
+                mostrarFormularioVehiculo = false
+                esEdicionVehiculo = false
+                patenteBusqueda = ""
+                vm.limpiarBusquedaVehiculo()
+                vm.limpiarMensajesVehiculo()
+            },
+            onEditarVehiculo = { vehiculo ->
+                flujoNuevoVehiculo = false
+                esEdicionVehiculo = true
+                mostrarFormularioVehiculo = true
+                vehiculoSeleccionado = vehiculo.patente
+                patente = vehiculo.patente
+                marca = vehiculo.marca
+                modelo = vehiculo.modelo
+                anio = vehiculo.anio.toString()
+                color = vehiculo.color.orEmpty()
+                kilometraje = vehiculo.kilometraje?.toString().orEmpty()
+                combustible = vehiculo.combustible.orEmpty()
+            },
+            onMostrarInfo = { vehiculoInfoDialog = it },
+            onDesvincular = { vehiculo ->
+                if (rutNormalizado == null) {
+                    vm.reportarMensajeVehiculo("Primero selecciona o registra un cliente")
+                } else {
+                    vm.desasociarVehiculoDeCliente(vehiculo.patente, rutNormalizado)
+                }
+            },
+            onRegistrarNuevoVehiculo = {
+                mostrarFormularioVehiculo = true
+                esEdicionVehiculo = false
+                patente = patenteBusqueda.uppercase()
+                marca = ""
+                modelo = ""
+                anio = ""
+                color = ""
+                kilometraje = ""
+                combustible = ""
+            },
+            onCancelarEdicion = {
+                if (flujoNuevoVehiculo) {
+                    mostrarConfirmarCancelarRegistro = true
+                } else {
+                    mostrarFormularioVehiculo = false
+                }
+            },
+            mostrarConfirmarCancelacion = mostrarConfirmarCancelarRegistro,
+            onConfirmarCancelarNuevo = {
+                mostrarConfirmarCancelarRegistro = false
+                mostrarFormularioVehiculo = false
+                flujoNuevoVehiculo = false
+                patenteBusqueda = ""
+                vm.limpiarBusquedaVehiculo()
                 patente = ""
                 marca = ""
                 modelo = ""
@@ -316,28 +434,43 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
                 kilometraje = ""
                 combustible = ""
             },
-            onGuardarVehiculo = {
-                val anioInt = anio.toIntOrNull()
-                if (rutNormalizado != null && patente.isNotBlank() && marca.isNotBlank() && modelo.isNotBlank() && anioInt != null) {
-                    val kmInt = kilometraje.toIntOrNull()
-                    vm.guardarVehiculo(
-                        Vehiculo(
-                            patente = patente.uppercase(),
-                            clienteRut = rutNormalizado,
-                            marca = marca,
-                            modelo = modelo,
-                            anio = anioInt,
-                            color = color.takeIf { it.isNotBlank() },
-                            kilometraje = kmInt,
-                            combustible = combustible.takeIf { it.isNotBlank() }
-                        )
-                    )
-                    vehiculoSeleccionado = patente.uppercase()
+            onDismissCancelarNuevo = { mostrarConfirmarCancelarRegistro = false },
+            onAsociarVehiculo = {
+                rutNormalizado?.let {
+                    vehiculoSeleccionado = patenteBusqueda.uppercase()
+                    vm.reasignarVehiculoACliente(patenteBusqueda.uppercase(), it)
                 }
             },
-            guardandoVehiculo = uiState.guardandoVehiculo,
-            mensajeVehiculo = uiState.mensajeVehiculo
+            onReasignarVehiculo = {
+                rutNormalizado?.let {
+                    vehiculoSeleccionado = patenteBusqueda.uppercase()
+                    vm.reasignarVehiculoACliente(patenteBusqueda.uppercase(), it)
+                }
+            }
         )
+
+        vehiculoInfoDialog?.let { vehiculo ->
+            AlertDialog(
+                onDismissRequest = { vehiculoInfoDialog = null },
+                confirmButton = {
+                    TextButton(onClick = { vehiculoInfoDialog = null }) {
+                        Text("Cerrar")
+                    }
+                },
+                title = { Text("Información del vehículo") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Patente: ${vehiculo.patente}")
+                        Text("Marca: ${vehiculo.marca}")
+                        Text("Modelo: ${vehiculo.modelo}")
+                        Text("Año: ${vehiculo.anio}")
+                        vehiculo.color?.let { Text("Color: $it") }
+                        vehiculo.kilometraje?.let { Text("Kilometraje: ${it} km") }
+                        vehiculo.combustible?.let { Text("Combustible: $it") }
+                    }
+                }
+            )
+        }
 
         MecanicosSection(
             mecanicos = uiState.mecanicos,
@@ -599,6 +732,7 @@ private fun ClienteSection(
 
 @Composable
 private fun VehiculoSection(
+    rutCliente: String?,
     patente: String,
     onPatenteChange: (String) -> Unit,
     marca: String,
@@ -618,10 +752,29 @@ private fun VehiculoSection(
     vehiculos: List<Vehiculo>,
     vehiculoSeleccionado: String?,
     onSeleccionarVehiculo: (Vehiculo?) -> Unit,
-    onCrearNuevoVehiculo: () -> Unit,
     onGuardarVehiculo: () -> Unit,
     guardandoVehiculo: Boolean,
-    mensajeVehiculo: String?
+    mensajeVehiculo: String?,
+    mostrarFormulario: Boolean,
+    esEdicion: Boolean,
+    flujoNuevoVehiculo: Boolean,
+    patenteBusqueda: String,
+    onPatenteBusquedaChange: (String) -> Unit,
+    onBuscarPatente: () -> Unit,
+    vehiculoBuscado: Vehiculo?,
+    mensajeBusquedaVehiculo: String?,
+    buscandoVehiculo: Boolean,
+    onMostrarFormularioNuevo: () -> Unit,
+    onEditarVehiculo: (Vehiculo) -> Unit,
+    onMostrarInfo: (Vehiculo) -> Unit,
+    onDesvincular: (Vehiculo) -> Unit,
+    onRegistrarNuevoVehiculo: () -> Unit,
+    onCancelarEdicion: () -> Unit,
+    mostrarConfirmarCancelacion: Boolean,
+    onConfirmarCancelarNuevo: () -> Unit,
+    onDismissCancelarNuevo: () -> Unit,
+    onAsociarVehiculo: () -> Unit,
+    onReasignarVehiculo: () -> Unit
 ) {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -643,19 +796,19 @@ private fun VehiculoSection(
                                 .fillMaxWidth()
                                 .selectable(
                                     selected = esSeleccionado,
-                                    role = Role.RadioButton,
-                                    onClick = { onSeleccionarVehiculo(vehiculo) }
+                                    onClick = { onSeleccionarVehiculo(vehiculo) },
+                                    role = Role.RadioButton
                                 )
-                                .padding(vertical = 4.dp)
+                                .padding(8.dp)
                         ) {
                             RadioButton(
                                 selected = esSeleccionado,
                                 onClick = { onSeleccionarVehiculo(vehiculo) }
                             )
-                            Column(modifier = Modifier.padding(start = 12.dp)) {
+                            Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
                                 Text("${vehiculo.patente} • ${vehiculo.marca} ${vehiculo.modelo}")
                                 Text(
-                                    text = listOfNotNull(
+                                    listOfNotNull(
                                         vehiculo.anio.toString(),
                                         vehiculo.color,
                                         vehiculo.kilometraje?.let { "${it} km" }
@@ -663,66 +816,168 @@ private fun VehiculoSection(
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                IconButton(onClick = { onMostrarInfo(vehiculo) }) {
+                                    Icon(Icons.Default.Info, contentDescription = "Información del vehículo")
+                                }
+                                IconButton(onClick = { onEditarVehiculo(vehiculo) }) {
+                                    Icon(Icons.Default.Edit, contentDescription = "Editar vehículo")
+                                }
+                                IconButton(onClick = { onDesvincular(vehiculo) }) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Desvincular vehículo")
+                                }
+                            }
                         }
                     }
                 }
-                TextButton(
-                    onClick = onCrearNuevoVehiculo,
-                    modifier = Modifier.align(Alignment.End)
-                ) {
-                    Text("Registrar nuevo vehículo")
+                vehiculoSeleccionado?.let {
+                    Text("Vehículo seleccionado: $it", style = MaterialTheme.typography.bodySmall)
                 }
             }
-            OutlinedTextField(
-                value = patente,
-                onValueChange = onPatenteChange,
-                label = { Text("Patente") },
-                modifier = Modifier.fillMaxWidth()
+
+            AssistChip(
+                onClick = onMostrarFormularioNuevo,
+                label = { Text("Registrar nuevo vehículo") },
+                enabled = rutCliente != null,
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = "Registrar nuevo"
+                    )
+                },
+                colors = AssistChipDefaults.assistChipColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    labelColor = MaterialTheme.colorScheme.onSecondaryContainer
+                )
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(
-                    value = marca,
-                    onValueChange = onMarcaChange,
-                    label = { Text("Marca") },
-                    modifier = Modifier.weight(1f)
+
+            if (flujoNuevoVehiculo) {
+                Divider()
+                Text(
+                    "Flujo basado en la patente",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
                 )
                 OutlinedTextField(
-                    value = modelo,
-                    onValueChange = onModeloChange,
-                    label = { Text("Modelo") },
-                    modifier = Modifier.weight(1f)
+                    value = patenteBusqueda,
+                    onValueChange = onPatenteBusquedaChange,
+                    label = { Text("Patente") },
+                    modifier = Modifier.fillMaxWidth()
                 )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = onBuscarPatente,
+                        enabled = patenteBusqueda.isNotBlank() && !buscandoVehiculo,
+                    ) {
+                        Text(if (buscandoVehiculo) "Buscando..." else "Buscar patente")
+                    }
+                    TextButton(onClick = onCancelarEdicion) {
+                        Text("Cancelar")
+                    }
+                }
+                mensajeBusquedaVehiculo?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall)
+                }
+                vehiculoBuscado?.let { vehiculo ->
+                    if (vehiculo.clienteRut.isBlank()) {
+                        Text("La patente ya existe pero no tiene cliente asignado", style = MaterialTheme.typography.bodySmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Button(onClick = onAsociarVehiculo) { Text("Asociar al cliente actual") }
+                            TextButton(onClick = onCancelarEdicion) { Text("Cancelar") }
+                        }
+                    } else if (rutCliente != null && normalizeRut(vehiculo.clienteRut) != normalizeRut(rutCliente)) {
+                        Text(
+                            "La patente ya está vinculada a otro cliente. Actualizarla la moverá al cliente actual.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Button(onClick = onReasignarVehiculo) { Text("Actualizar cliente") }
+                            TextButton(onClick = onCancelarEdicion) { Text("Cancelar") }
+                        }
+                    } else {
+                        Text("La patente ya está asociada a este cliente", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                if (vehiculoBuscado == null && mensajeBusquedaVehiculo?.contains("no existe", ignoreCase = true) == true) {
+                    Button(onClick = onRegistrarNuevoVehiculo) {
+                        Text("Registrar nuevo vehículo")
+                    }
+                }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(
-                    value = anio,
-                    onValueChange = onAnioChange,
-                    label = { Text("Año") },
-                    modifier = Modifier.weight(1f),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+
+            if (mostrarFormulario) {
+                Divider()
+                val patenteSoloLectura = esEdicion || flujoNuevoVehiculo
+                Text(
+                    if (esEdicion) "Modificar vehículo" else "Nuevo vehículo",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
                 )
                 OutlinedTextField(
-                    value = color,
-                    onValueChange = onColorChange,
-                    label = { Text("Color") },
-                    modifier = Modifier.weight(1f)
+                    value = patente,
+                    onValueChange = onPatenteChange,
+                    label = { Text("Patente") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !patenteSoloLectura
                 )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = marca,
+                        onValueChange = onMarcaChange,
+                        label = { Text("Marca") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = modelo,
+                        onValueChange = onModeloChange,
+                        label = { Text("Modelo") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = anio,
+                        onValueChange = onAnioChange,
+                        label = { Text("Año") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                    OutlinedTextField(
+                        value = color,
+                        onValueChange = onColorChange,
+                        label = { Text("Color") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = kilometraje,
+                        onValueChange = onKilometrajeChange,
+                        label = { Text("Kilometraje") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                    OutlinedTextField(
+                        value = combustible,
+                        onValueChange = onCombustibleChange,
+                        label = { Text("Combustible") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TextButton(onClick = onCancelarEdicion) {
+                        Text(if (flujoNuevoVehiculo) "Cancelar" else "Cancelar cambios")
+                    }
+                    Button(
+                        onClick = onGuardarVehiculo,
+                        enabled = !guardandoVehiculo
+                    ) {
+                        Text(if (esEdicion) "Guardar cambios" else "Agregar vehículo")
+                    }
+                }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(
-                    value = kilometraje,
-                    onValueChange = onKilometrajeChange,
-                    label = { Text("Kilometraje") },
-                    modifier = Modifier.weight(1f),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-                OutlinedTextField(
-                    value = combustible,
-                    onValueChange = onCombustibleChange,
-                    label = { Text("Combustible") },
-                    modifier = Modifier.weight(1f)
-                )
-            }
+
             OutlinedTextField(
                 value = sintomas,
                 onValueChange = onSintomasChange,
@@ -743,16 +998,27 @@ private fun VehiculoSection(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            Button(
-                onClick = onGuardarVehiculo,
-                enabled = patente.isNotBlank() && marca.isNotBlank() && modelo.isNotBlank() && anio.length == 4 && !guardandoVehiculo,
-                modifier = Modifier.align(Alignment.End)
-            ) {
-                Text("Guardar vehículo")
-            }
         }
     }
+    if (mostrarConfirmarCancelacion) {
+        AlertDialog(
+            onDismissRequest = onDismissCancelarNuevo,
+            confirmButton = {
+                TextButton(onClick = onConfirmarCancelarNuevo) {
+                    Text("Sí")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissCancelarNuevo) {
+                    Text("No")
+                }
+            },
+            title = { Text("¿Desea cancelar el registro de un nuevo vehículo?") },
+            text = { Text("Se descartará toda la información ingresada.") }
+        )
+    }
 }
+
 
 @Composable
 private fun MecanicosSection(
