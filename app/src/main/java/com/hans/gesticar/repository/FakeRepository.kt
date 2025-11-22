@@ -48,6 +48,7 @@ class FakeRepository : Repository {
     val evidencias = mutableListOf<Evidencia>()
     val audit = mutableListOf<AuditLog>()
     val tareas = mutableMapOf<String, MutableList<TareaOt>>()
+    val sintomasPorOt = mutableMapOf<String, MutableList<SintomaOt>>()
 
     init {
         // Seed mínimo
@@ -181,10 +182,33 @@ class FakeRepository : Repository {
         return vehiculos.filter { normalizeRut(it.clienteRut) == rutNormalizado }
     }
 
+    override suspend fun buscarVehiculoPorPatente(patente: String): Vehiculo? {
+        val patenteUpper = patente.uppercase()
+        return vehiculos.firstOrNull { it.patente.equals(patenteUpper, ignoreCase = true) }
+    }
+
     override suspend fun guardarVehiculo(vehiculo: Vehiculo) {
         val patenteUpper = vehiculo.patente.uppercase()
         vehiculos.removeAll { it.patente.equals(patenteUpper, ignoreCase = true) }
         vehiculos += vehiculo.copy(patente = patenteUpper, clienteRut = normalizeRut(vehiculo.clienteRut))
+    }
+
+    override suspend fun desasociarVehiculo(patente: String) {
+        val patenteUpper = patente.uppercase()
+        val index = vehiculos.indexOfFirst { it.patente.equals(patenteUpper, ignoreCase = true) }
+        if (index >= 0) {
+            val vehiculo = vehiculos[index]
+            vehiculos[index] = vehiculo.copy(clienteRut = "")
+        }
+    }
+
+    override suspend fun actualizarClienteVehiculo(patente: String, clienteRut: String): Vehiculo? {
+        val patenteUpper = patente.uppercase()
+        val index = vehiculos.indexOfFirst { it.patente.equals(patenteUpper, ignoreCase = true) }
+        if (index < 0) return null
+        val actualizado = vehiculos[index].copy(clienteRut = normalizeRut(clienteRut))
+        vehiculos[index] = actualizado
+        return actualizado
     }
 
     fun obtenerPresupuesto(otId: String): Presupuesto = presupuestos.getValue(otId)
@@ -261,8 +285,13 @@ class FakeRepository : Repository {
             vehiculo = vehiculo,
             mecanicosAsignados = mecanicos,
             presupuesto = presupuesto,
-            tareas = tareasGuardadas
+            tareas = tareasGuardadas,
+            sintomas = sintomasPorOt[otId]?.map { it.copy() } ?: emptyList()
         )
+    }
+
+    override suspend fun obtenerSintomas(otId: String): List<SintomaOt> {
+        return sintomasPorOt[otId]?.map { it.copy() } ?: emptyList()
     }
 
     override suspend fun actualizarNotasOt(otId: String, notas: String?) {

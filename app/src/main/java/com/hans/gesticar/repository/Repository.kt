@@ -5,6 +5,8 @@ import com.hans.gesticar.model.Ot
 import com.hans.gesticar.model.OtState
 import com.hans.gesticar.model.OtDetalle
 import com.hans.gesticar.model.PresupuestoItem
+import com.hans.gesticar.model.SintomaInput
+import com.hans.gesticar.model.SintomaOt
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
 import com.hans.gesticar.model.TareaOt
@@ -24,12 +26,16 @@ interface Repository {
     suspend fun buscarClientePorRut(rut: String): Cliente?
     suspend fun guardarCliente(cliente: Cliente)
     suspend fun obtenerVehiculosPorRut(rut: String): List<Vehiculo>
+    suspend fun buscarVehiculoPorPatente(patente: String): Vehiculo?
     suspend fun guardarVehiculo(vehiculo: Vehiculo)
+    suspend fun desasociarVehiculo(patente: String)
+    suspend fun actualizarClienteVehiculo(patente: String, clienteRut: String): Vehiculo?
     suspend fun actualizarNotasOt(otId: String, notas: String?)
     suspend fun actualizarMecanicosOt(otId: String, mecanicosIds: List<String>)
     suspend fun actualizarVehiculoOt(otId: String, patente: String): Boolean
     suspend fun guardarPresupuesto(otId: String, items: List<PresupuestoItem>, aprobado: Boolean, ivaPorc: Int)
     suspend fun guardarTareas(otId: String, tareas: List<TareaOt>)
+    suspend fun obtenerSintomas(otId: String): List<SintomaOt>
     suspend fun crearOt(
         cliente: Cliente,
         vehiculo: Vehiculo,
