@@ -538,12 +538,43 @@ class SqliteRepository(context: Context) : Repository {
         }
     }
 
+    override suspend fun buscarVehiculoPorPatente(patente: String): Vehiculo? {
+        val db = helper.readableDatabase
+        return obtenerVehiculo(db, patente.uppercase())
+    }
+
     override suspend fun guardarVehiculo(vehiculo: Vehiculo) {
         val db = helper.writableDatabase
         db.beginTransaction()
         try {
             upsertVehiculo(db, vehiculo)
             db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override suspend fun desasociarVehiculo(patente: String) {
+        val db = helper.writableDatabase
+        db.beginTransaction()
+        try {
+            val vehiculo = obtenerVehiculo(db, patente.uppercase()) ?: return
+            upsertVehiculo(db, vehiculo.copy(clienteRut = ""))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override suspend fun actualizarClienteVehiculo(patente: String, clienteRut: String): Vehiculo? {
+        val db = helper.writableDatabase
+        db.beginTransaction()
+        try {
+            val vehiculo = obtenerVehiculo(db, patente.uppercase()) ?: return null
+            val actualizado = vehiculo.copy(clienteRut = normalizeRut(clienteRut))
+            upsertVehiculo(db, actualizado)
+            db.setTransactionSuccessful()
+            return actualizado
         } finally {
             db.endTransaction()
         }
