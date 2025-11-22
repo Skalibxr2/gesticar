@@ -336,12 +336,23 @@ class MainViewModel(
                 )
 
                 if (iniciar) {
+                    if (mecanicosIds.isEmpty()) {
+                        _createOtUi.update {
+                            it.copy(
+                                guardando = false,
+                                mensaje = "Asigna al menos un mecánico antes de iniciar la OT.",
+                                exito = false
+                            )
+                        }
+                        refreshOts()
+                        return@launch
+                    }
                     val pudoIniciar = repo.cambiarEstado(ot.id, OtState.EN_EJECUCION)
                     if (!pudoIniciar) {
                         _createOtUi.update {
                             it.copy(
                                 guardando = false,
-                                mensaje = "No se pudo iniciar la OT. Verifica que el presupuesto esté aprobado.",
+                                mensaje = "No se pudo iniciar la OT. Verifica que el presupuesto esté aprobado y que haya mecánicos asignados.",
                                 exito = false
                             )
                         }
@@ -605,6 +616,20 @@ class MainViewModel(
             }
             val datosCompletos = detalle.cliente != null && detalle.vehiculo != null &&
                 detalle.ot.mecanicosAsignados.isNotEmpty() && detalle.presupuesto.items.isNotEmpty()
+            if (detalle.ot.mecanicosAsignados.isEmpty()) {
+                _ui.update {
+                    it.copy(
+                        detalleSeleccionado = detalle,
+                        detalleMensajes = DetalleMensajes(
+                            estado = SectionMessage(
+                                text = "Asigna al menos un mecánico antes de iniciar la OT",
+                                isError = true
+                            )
+                        )
+                    )
+                }
+                return@launch
+            }
             if (!detalle.presupuesto.aprobado || !datosCompletos) {
                 _ui.update {
                     it.copy(

@@ -240,6 +240,7 @@ class FakeRepository : Repository {
         val ot = ots.find { it.id == otId } ?: return false
         val p = obtenerPresupuesto(otId)
         // Regla: no se puede EN_EJECUCION sin presupuesto aprobado
+        if (nuevo == OtState.EN_EJECUCION && ot.mecanicosAsignados.isEmpty()) return false
         if (nuevo == OtState.EN_EJECUCION && !p.aprobado) return false
         // Regla: FINALIZADA solo si ya estaba en EN_EJECUCION
         if (nuevo == OtState.FINALIZADA && ot.estado != OtState.EN_EJECUCION) return false

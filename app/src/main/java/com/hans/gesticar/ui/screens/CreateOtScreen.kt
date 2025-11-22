@@ -531,7 +531,8 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             )
         }
         val puedeGuardar = clienteValido && vehiculoValido && !uiState.guardando
-        val puedeIniciar = puedeGuardar && presupuestoAprobado && presupuestoItemsValidos.isNotEmpty()
+        val puedeIniciar = puedeGuardar && presupuestoAprobado &&
+            presupuestoItemsValidos.isNotEmpty() && seleccionMecanicos.isNotEmpty()
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             Button(
