@@ -32,12 +32,16 @@ fun formatRutForDisplay(rut: String): String {
 }
 
 fun formatRutInput(raw: String): String {
-    val cleaned = sanitizeRutInput(raw)
+    val cleaned = sanitizeRutInput(raw).take(9)
     if (cleaned.isEmpty()) return ""
-    if (cleaned.length == 1) return cleaned
-    val cuerpo = cleaned.dropLast(1).filter { it.isDigit() }
+
+    // Se muestra el guion solo cuando el RUT tiene al menos 7 dígitos + DV.
+    if (cleaned.length <= 1) return cleaned
+
+    val cuerpo = cleaned.dropLast(1)
     val dv = cleaned.last()
-    return if (cuerpo.isEmpty()) dv.toString() else "$cuerpo - $dv"
+
+    return if (cuerpo.length >= 7) "$cuerpo-$dv" else cleaned
 }
 
 fun sanitizeRutInput(raw: String): String {

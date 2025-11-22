@@ -1,13 +1,15 @@
 package com.hans.gesticar.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.hans.gesticar.viewmodel.UiState
+import com.hans.gesticar.R
 
 @Composable
 fun LoginScreen(mensaje: String?, onLogin: (String, String) -> Unit) {
@@ -15,7 +17,13 @@ fun LoginScreen(mensaje: String?, onLogin: (String, String) -> Unit) {
     var pass by remember { mutableStateOf("") }
 
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(Modifier.width(320.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.width(320.dp), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Image(
+                painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                contentDescription = "Logotipo de GestiCar",
+                modifier = Modifier
+                    .size(96.dp)
+            )
             Text("Ingreso a GestiCar", style = MaterialTheme.typography.titleLarge)
             OutlinedTextField(
                 value = email,
