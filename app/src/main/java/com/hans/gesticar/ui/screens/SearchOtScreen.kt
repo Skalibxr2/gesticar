@@ -17,7 +17,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
@@ -52,8 +51,11 @@ import com.hans.gesticar.model.Rol
 import com.hans.gesticar.model.TareaOt
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
+import com.hans.gesticar.ui.components.EditableTaskState
 import com.hans.gesticar.ui.components.DropdownTextField
-import com.hans.gesticar.ui.components.VehiclePhotosSection
+import com.hans.gesticar.ui.components.TasksSection
+import com.hans.gesticar.ui.components.toEditableTaskState
+import com.hans.gesticar.ui.components.toTareaOt
 import com.hans.gesticar.util.formatRutInput
 import com.hans.gesticar.util.normalizeRut
 import com.hans.gesticar.viewmodel.MainViewModel
@@ -257,17 +259,6 @@ private class PresupuestoItemFormState(
     var tipoMenuExpanded by mutableStateOf(false)
 }
 
-private class EditableTaskState(
-    val id: String = UUID.randomUUID().toString(),
-    titulo: String = "",
-    descripcion: String = "",
-    completada: Boolean = false
-) {
-    var titulo by mutableStateOf(titulo)
-    var descripcion by mutableStateOf(descripcion)
-    var completada by mutableStateOf(completada)
-}
-
 @Composable
 private fun OtDetailPanel(
     detalle: OtDetalle,
@@ -317,12 +308,7 @@ private fun OtDetailPanel(
         }
         tareas.clear()
         detalle.tareas.forEach { tarea ->
-            tareas += EditableTaskState(
-                id = tarea.id,
-                titulo = tarea.titulo,
-                descripcion = tarea.descripcion.orEmpty(),
-                completada = tarea.completada
-            )
+            tareas += tarea.toEditableTaskState()
         }
         if (tareas.isEmpty()) {
             tareas += EditableTaskState()
@@ -490,10 +476,30 @@ private fun OtDetailPanel(
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
-                VehiclePhotosSection(
-                    receptionTitle = "Evidencia al recibir el vehículo",
-                    completionTitle = "Evidencia de reparación o entrega"
+                TasksSection(
+                    tasks = tareas,
+                    soloLectura = soloLectura,
+                    modifier = Modifier.fillMaxWidth(),
+                    title = "Tareas preventivas o correctivas"
                 )
+                Button(
+                    onClick = {
+                        val tareasValidas = tareas
+                            .filter { it.descripcion.isNotBlank() }
+                            .map { it.toTareaOt() }
+                        onGuardarTareas(tareasValidas)
+                    },
+                    enabled = !soloLectura
+                ) {
+                    Text("Guardar tareas")
+                }
+                mensajes.tareas?.let { mensaje ->
+                    Text(
+                        mensaje.text,
+                        color = if (mensaje.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
 
             Divider()
@@ -591,70 +597,6 @@ private fun OtDetailPanel(
             }
 
             Divider()
-
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Tareas", style = MaterialTheme.typography.titleSmall)
-                tareas.forEach { tarea ->
-                    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Checkbox(
-                                    checked = tarea.completada,
-                                    onCheckedChange = { tarea.completada = it },
-                                    enabled = !soloLectura
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                OutlinedTextField(
-                                    value = tarea.titulo,
-                                    onValueChange = { tarea.titulo = it },
-                                    label = { Text("Nombre de tarea") },
-                                    enabled = !soloLectura,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                IconButton(
-                                    onClick = { if (!soloLectura && tareas.size > 1) tareas.remove(tarea) },
-                                    enabled = !soloLectura
-                                ) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Eliminar tarea")
-                                }
-                            }
-                            OutlinedTextField(
-                                value = tarea.descripcion,
-                                onValueChange = { tarea.descripcion = it },
-                                label = { Text("Descripción realizada") },
-                                enabled = !soloLectura,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-                }
-                if (!soloLectura) {
-                    TextButton(onClick = { tareas += EditableTaskState() }) { Text("Agregar tarea") }
-                }
-                Button(
-                    onClick = {
-                        val tareasValidas = tareas.filter { it.titulo.isNotBlank() }.map {
-                            TareaOt(
-                                id = it.id,
-                                titulo = it.titulo.trim(),
-                                descripcion = it.descripcion.takeIf(String::isNotBlank),
-                                completada = it.completada
-                            )
-                        }
-                        onGuardarTareas(tareasValidas)
-                    },
-                    enabled = !soloLectura
-                ) {
-                    Text("Guardar tareas")
-                }
-                mensajes.tareas?.let { mensaje ->
-                    Text(
-                        mensaje.text,
-                        color = if (mensaje.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
 
             Divider()
 

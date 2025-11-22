@@ -229,6 +229,7 @@ class MainViewModel(
         presupuestoItems: List<PresupuestoItem>,
         presupuestoAprobado: Boolean,
         sintomas: String?,
+        tareas: List<TareaOt>,
         iniciar: Boolean
     ) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -240,7 +241,8 @@ class MainViewModel(
                     mecanicosIds = mecanicosIds,
                     presupuestoItems = presupuestoItems,
                     presupuestoAprobado = presupuestoAprobado,
-                    sintomas = sintomas
+                    sintomas = sintomas,
+                    tareas = tareas
                 )
 
                 if (iniciar) {

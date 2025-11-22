@@ -52,7 +52,9 @@ import com.hans.gesticar.model.PresupuestoItem
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
 import com.hans.gesticar.ui.Routes
-import com.hans.gesticar.ui.components.VehiclePhotosSection
+import com.hans.gesticar.ui.components.EditableTaskState
+import com.hans.gesticar.ui.components.TasksSection
+import com.hans.gesticar.ui.components.toTareaOt
 import com.hans.gesticar.viewmodel.MainViewModel
 import com.hans.gesticar.util.formatRutInput
 import com.hans.gesticar.util.isRutValid
@@ -96,6 +98,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
 
     var presupuestoAprobado by rememberSaveable { mutableStateOf(false) }
     val items = remember { mutableStateListOf(PresupuestoItemForm()) }
+    val tareas = remember { mutableStateListOf(EditableTaskState()) }
     val seleccionMecanicos = remember { mutableStateListOf<String>() }
     var vehiculoSeleccionado by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -119,6 +122,8 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             vehiculoSeleccionado = null
             items.clear()
             items += PresupuestoItemForm()
+            tareas.clear()
+            tareas += EditableTaskState()
         }
     }
 
@@ -356,6 +361,9 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
                         kilometraje = kmInt,
                         combustible = combustible.takeIf { it.isNotBlank() }
                     )
+                    val tareasValidas = tareas
+                        .filter { it.descripcion.isNotBlank() }
+                        .map { it.toTareaOt() }
                     vm.crearOt(
                         cliente = cliente,
                         vehiculo = vehiculo,
@@ -363,6 +371,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
                         presupuestoItems = presupuestoItemsValidos,
                         presupuestoAprobado = presupuestoAprobado,
                         sintomas = sintomas.takeIf { it.isNotBlank() },
+                        tareas = tareasValidas,
                         iniciar = false
                     )
                 },
@@ -392,6 +401,9 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
                         kilometraje = kmInt,
                         combustible = combustible.takeIf { it.isNotBlank() }
                     )
+                    val tareasValidas = tareas
+                        .filter { it.descripcion.isNotBlank() }
+                        .map { it.toTareaOt() }
                     vm.crearOt(
                         cliente = cliente,
                         vehiculo = vehiculo,
@@ -399,6 +411,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
                         presupuestoItems = presupuestoItemsValidos,
                         presupuestoAprobado = true,
                         sintomas = sintomas.takeIf { it.isNotBlank() },
+                        tareas = tareasValidas,
                         iniciar = true
                     )
                 },
@@ -628,9 +641,11 @@ private fun VehiculoSection(
                 label = { Text("Síntomas entregados por el cliente") },
                 modifier = Modifier.fillMaxWidth()
             )
-            VehiclePhotosSection(
-                receptionTitle = "Fotos al recibir el vehículo",
-                completionTitle = "Fotos de avance o entrega"
+            TasksSection(
+                tasks = tareas,
+                soloLectura = false,
+                title = "Tareas preventivas o correctivas",
+                modifier = Modifier.fillMaxWidth()
             )
             if (guardandoVehiculo) {
                 Text("Guardando vehículo...", style = MaterialTheme.typography.bodySmall)
