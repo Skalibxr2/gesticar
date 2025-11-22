@@ -43,6 +43,7 @@ class SqliteRepository(context: Context) : Repository {
                     rut TEXT PRIMARY KEY,
                     nombre TEXT NOT NULL,
                     correo TEXT,
+                    comuna TEXT,
                     direccion TEXT,
                     telefono TEXT
                 )
@@ -294,6 +295,7 @@ class SqliteRepository(context: Context) : Repository {
                         put("rut", clienteUnoRut)
                         put("nombre", "Juan Pérez")
                         put("correo", "juan@example.com")
+                        put("comuna", "Santiago")
                     }
                 )
 
@@ -321,6 +323,7 @@ class SqliteRepository(context: Context) : Repository {
                         put("rut", clienteDosRut)
                         put("nombre", "María González")
                         put("correo", "maria@example.com")
+                        put("comuna", "Valparaíso")
                     }
                 )
 
@@ -584,7 +587,7 @@ class SqliteRepository(context: Context) : Repository {
     override suspend fun buscarClientePorRut(rut: String): Cliente? {
         val rutNormalizado = normalizeRut(rut)
         val cursor = helper.readableDatabase.rawQuery(
-            "SELECT rut, nombre, correo, direccion, telefono FROM clientes WHERE rut = ?",
+            "SELECT rut, nombre, correo, comuna, direccion, telefono FROM clientes WHERE rut = ?",
             arrayOf(rutNormalizado)
         )
         cursor.use {
@@ -593,8 +596,9 @@ class SqliteRepository(context: Context) : Repository {
                     rut = it.getString(0),
                     nombre = it.getString(1),
                     correo = it.getString(2),
-                    direccion = it.getString(3),
-                    telefono = it.getString(4)
+                    comuna = it.getString(3),
+                    direccion = it.getString(4),
+                    telefono = it.getString(5)
                 )
             } else {
                 null
@@ -642,12 +646,43 @@ class SqliteRepository(context: Context) : Repository {
         }
     }
 
+    override suspend fun buscarVehiculoPorPatente(patente: String): Vehiculo? {
+        val db = helper.readableDatabase
+        return obtenerVehiculo(db, patente.uppercase())
+    }
+
     override suspend fun guardarVehiculo(vehiculo: Vehiculo) {
         val db = helper.writableDatabase
         db.beginTransaction()
         try {
             upsertVehiculo(db, vehiculo)
             db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override suspend fun desasociarVehiculo(patente: String) {
+        val db = helper.writableDatabase
+        db.beginTransaction()
+        try {
+            val vehiculo = obtenerVehiculo(db, patente.uppercase()) ?: return
+            upsertVehiculo(db, vehiculo.copy(clienteRut = ""))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override suspend fun actualizarClienteVehiculo(patente: String, clienteRut: String): Vehiculo? {
+        val db = helper.writableDatabase
+        db.beginTransaction()
+        try {
+            val vehiculo = obtenerVehiculo(db, patente.uppercase()) ?: return null
+            val actualizado = vehiculo.copy(clienteRut = normalizeRut(clienteRut))
+            upsertVehiculo(db, actualizado)
+            db.setTransactionSuccessful()
+            return actualizado
         } finally {
             db.endTransaction()
         }
@@ -981,7 +1016,7 @@ class SqliteRepository(context: Context) : Repository {
 
     private fun obtenerCliente(db: SQLiteDatabase, rut: String): Cliente? {
         val cursor = db.rawQuery(
-            "SELECT rut, nombre, correo, direccion, telefono FROM clientes WHERE rut = ?",
+            "SELECT rut, nombre, correo, comuna, direccion, telefono FROM clientes WHERE rut = ?",
             arrayOf(rut)
         )
         cursor.use {
@@ -990,8 +1025,9 @@ class SqliteRepository(context: Context) : Repository {
                     rut = it.getString(0),
                     nombre = it.getString(1),
                     correo = it.getString(2),
-                    direccion = it.getString(3),
-                    telefono = it.getString(4)
+                    comuna = it.getString(3),
+                    direccion = it.getString(4),
+                    telefono = it.getString(5)
                 )
             } else {
                 null
@@ -1128,6 +1164,7 @@ class SqliteRepository(context: Context) : Repository {
                 put("rut", rutNormalizado)
                 put("nombre", cliente.nombre)
                 put("correo", cliente.correo)
+                put("comuna", cliente.comuna)
                 put("direccion", cliente.direccion)
                 put("telefono", cliente.telefono)
             },

@@ -23,6 +23,7 @@ data class Cliente(
     val nombre: String,
     val correo: String? = null,
     val direccion: String? = null,
+    val comuna: String? = null,
     val telefono: String? = null
 )
 
