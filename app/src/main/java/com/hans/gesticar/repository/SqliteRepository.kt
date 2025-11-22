@@ -13,8 +13,7 @@ import com.hans.gesticar.model.OtState
 import com.hans.gesticar.model.Presupuesto
 import com.hans.gesticar.model.PresupuestoItem
 import com.hans.gesticar.model.Rol
-import com.hans.gesticar.model.SintomaInput
-import com.hans.gesticar.model.SintomaOt
+import com.hans.gesticar.model.TareaEstado
 import com.hans.gesticar.model.TareaOt
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
@@ -141,7 +140,10 @@ class SqliteRepository(context: Context) : Repository {
                     ot_id TEXT NOT NULL,
                     titulo TEXT NOT NULL,
                     descripcion TEXT,
-                    completada INTEGER NOT NULL DEFAULT 0,
+                    fecha_creacion INTEGER NOT NULL,
+                    fecha_inicio INTEGER,
+                    fecha_termino INTEGER,
+                    estado TEXT NOT NULL,
                     FOREIGN KEY (ot_id) REFERENCES ots(id)
                 )
                 """.trimIndent()
@@ -804,7 +806,10 @@ class SqliteRepository(context: Context) : Repository {
                         put("ot_id", otId)
                         put("titulo", tarea.titulo)
                         put("descripcion", tarea.descripcion)
-                        put("completada", if (tarea.completada) 1 else 0)
+                        put("fecha_creacion", tarea.fechaCreacion)
+                        put("fecha_inicio", tarea.fechaInicio)
+                        put("fecha_termino", tarea.fechaTermino)
+                        put("estado", tarea.estado.name)
                     }
                 )
             }
@@ -826,7 +831,8 @@ class SqliteRepository(context: Context) : Repository {
         mecanicosIds: List<String>,
         presupuestoItems: List<PresupuestoItem>,
         presupuestoAprobado: Boolean,
-        sintomas: List<SintomaInput>
+        sintomas: String?,
+        tareas: List<TareaOt>
     ): Ot {
         val db = helper.writableDatabase
         db.beginTransaction()
@@ -895,6 +901,24 @@ class SqliteRepository(context: Context) : Repository {
                     ContentValues().apply {
                         put("ot_id", otId)
                         put("mecanico_id", mecanicoId)
+                    }
+                )
+            }
+
+            db.delete("ot_tareas", "ot_id = ?", arrayOf(otId))
+            tareas.forEach { tarea ->
+                db.insert(
+                    "ot_tareas",
+                    null,
+                    ContentValues().apply {
+                        put("id", tarea.id)
+                        put("ot_id", otId)
+                        put("titulo", tarea.titulo)
+                        put("descripcion", tarea.descripcion)
+                        put("fecha_creacion", tarea.fechaCreacion)
+                        put("fecha_inicio", tarea.fechaInicio)
+                        put("fecha_termino", tarea.fechaTermino)
+                        put("estado", tarea.estado.name)
                     }
                 )
             }
@@ -1101,7 +1125,7 @@ class SqliteRepository(context: Context) : Repository {
     private fun obtenerTareas(db: SQLiteDatabase, otId: String): List<TareaOt> {
         val cursor = db.rawQuery(
             """
-            SELECT id, titulo, descripcion, completada
+            SELECT id, titulo, descripcion, fecha_creacion, fecha_inicio, fecha_termino, estado
             FROM ot_tareas
             WHERE ot_id = ?
             ORDER BY titulo
@@ -1111,11 +1135,16 @@ class SqliteRepository(context: Context) : Repository {
         cursor.use {
             val list = ArrayList<TareaOt>(it.count.coerceAtLeast(0))
             while (it.moveToNext()) {
+                val fechaInicio = if (it.isNull(4)) null else it.getLong(4)
+                val fechaTermino = if (it.isNull(5)) null else it.getLong(5)
                 list += TareaOt(
                     id = it.getString(0),
                     titulo = it.getString(1),
                     descripcion = it.getString(2),
-                    completada = it.getInt(3) == 1
+                    fechaCreacion = it.getLong(3),
+                    fechaInicio = fechaInicio,
+                    fechaTermino = fechaTermino,
+                    estado = TareaEstado.valueOf(it.getString(6))
                 )
             }
             return list

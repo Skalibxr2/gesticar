@@ -11,8 +11,7 @@ import com.hans.gesticar.model.OtDetalle
 import com.hans.gesticar.model.Presupuesto
 import com.hans.gesticar.model.PresupuestoItem
 import com.hans.gesticar.model.Rol
-import com.hans.gesticar.model.SintomaInput
-import com.hans.gesticar.model.SintomaOt
+import com.hans.gesticar.model.TareaEstado
 import com.hans.gesticar.model.TareaOt
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
@@ -90,8 +89,14 @@ class FakeRepository : Repository {
         agregarItemPresupuesto(ot.id, ItemTipo.MO, "Diagnóstico", 1, 15000)
         agregarItemPresupuesto(ot.id, ItemTipo.REP, "Bujías", 4, 8000)
         tareas[ot.id] = mutableListOf(
-            TareaOt(titulo = "Revisión inicial", descripcion = "Verificar tren delantero"),
-            TareaOt(titulo = "Cambio de bujías", completada = false)
+            TareaOt(
+                titulo = "Revisión inicial",
+                descripcion = "Verificar tren delantero",
+                estado = TareaEstado.TERMINADA,
+                fechaInicio = System.currentTimeMillis(),
+                fechaTermino = System.currentTimeMillis()
+            ),
+            TareaOt(titulo = "Cambio de bujías", estado = TareaEstado.CREADA)
         )
     }
 
@@ -114,7 +119,8 @@ class FakeRepository : Repository {
     private fun crearOtInternal(
         vehiculoPatente: String,
         notas: String?,
-        mecanicos: List<String>
+        mecanicos: List<String>,
+        tareasIniciales: List<TareaOt> = emptyList()
     ): Ot {
         val ot = Ot(
             numero = nextOtNumber(),
@@ -125,14 +131,7 @@ class FakeRepository : Repository {
         )
         ots += ot
         presupuestos[ot.id] = Presupuesto(otId = ot.id)
-        tareas[ot.id] = mutableListOf()
-        sintomasPorOt[ot.id] = mutableListOf(
-            SintomaOt(
-                otId = ot.id,
-                descripcion = notas ?: "Ruidos reportados",
-                registradoEn = ot.fechaCreacion
-            )
-        )
+        tareas[ot.id] = tareasIniciales.map { it.copy() }.toMutableList()
         log(ot.id, "CREAR_OT")
         return ot
     }
@@ -143,7 +142,8 @@ class FakeRepository : Repository {
         mecanicosIds: List<String>,
         presupuestoItems: List<PresupuestoItem>,
         presupuestoAprobado: Boolean,
-        sintomas: List<SintomaInput>
+        sintomas: String?,
+        tareas: List<TareaOt>
     ): Ot {
         guardarCliente(cliente)
 
@@ -154,17 +154,7 @@ class FakeRepository : Repository {
         )
         guardarVehiculo(vehiculoNormalizado)
 
-        val ot = crearOtInternal(vehiculoNormalizado.patente, null, mecanicosIds)
-
-        val sintomasOt = sintomas.map { entrada ->
-            SintomaOt(
-                otId = ot.id,
-                descripcion = entrada.descripcion,
-                registradoEn = entrada.registradoEn,
-                fotos = entrada.fotos
-            )
-        }
-        sintomasPorOt[ot.id] = sintomasOt.toMutableList()
+        val ot = crearOtInternal(vehiculoNormalizado.patente, sintomas, mecanicosIds, tareas)
 
         val presupuesto = presupuestos.getValue(ot.id)
         presupuesto.items.clear()

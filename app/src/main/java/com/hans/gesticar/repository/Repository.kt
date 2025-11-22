@@ -42,6 +42,7 @@ interface Repository {
         mecanicosIds: List<String>,
         presupuestoItems: List<PresupuestoItem>,
         presupuestoAprobado: Boolean,
-        sintomas: List<SintomaInput>
+        sintomas: String?,
+        tareas: List<TareaOt>
     ): Ot
 }

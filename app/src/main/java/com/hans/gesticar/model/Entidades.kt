@@ -64,11 +64,22 @@ data class Presupuesto(
     val total: Int get() = subtotal + iva
 }
 
+enum class TareaEstado {
+    CREADA,
+    INICIADA,
+    CANCELADA,
+    TERMINADA,
+    TERMINADA_INCOMPLETA
+}
+
 data class TareaOt(
     val id: String = UUID.randomUUID().toString(),
     val titulo: String,
     val descripcion: String? = null,
-    val completada: Boolean = false
+    val fechaCreacion: Long = System.currentTimeMillis(),
+    val fechaInicio: Long? = null,
+    val fechaTermino: Long? = null,
+    val estado: TareaEstado = TareaEstado.CREADA
 )
 
 data class SintomaInput(
