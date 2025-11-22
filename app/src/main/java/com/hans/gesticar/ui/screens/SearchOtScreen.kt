@@ -16,6 +16,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenuItem
@@ -40,6 +42,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.hans.gesticar.model.ItemTipo
@@ -248,15 +251,47 @@ private fun OtCard(ot: Ot, seleccionado: Boolean, onClick: () -> Unit) {
 private class PresupuestoItemFormState(
     val id: String = UUID.randomUUID().toString(),
     tipo: ItemTipo = ItemTipo.MO,
+    titulo: String = "",
     descripcion: String = "",
     cantidad: String = "1",
-    precio: String = ""
+    precio: String = "",
+    expandido: Boolean = false
 ) {
     var tipo by mutableStateOf(tipo)
+    var titulo by mutableStateOf(titulo)
     var descripcion by mutableStateOf(descripcion)
     var cantidad by mutableStateOf(cantidad)
     var precio by mutableStateOf(precio)
-    var tipoMenuExpanded by mutableStateOf(false)
+    var expandido by mutableStateOf(expandido)
+}
+
+private fun PresupuestoItemFormState.copy(
+    id: String = this.id,
+    tipo: ItemTipo = this.tipo,
+    titulo: String = this.titulo,
+    descripcion: String = this.descripcion,
+    cantidad: String = this.cantidad,
+    precio: String = this.precio,
+    expandido: Boolean = this.expandido,
+): PresupuestoItemFormState = PresupuestoItemFormState(
+    id = id,
+    tipo = tipo,
+    titulo = titulo,
+    descripcion = descripcion,
+    cantidad = cantidad,
+    precio = precio,
+    expandido = expandido,
+)
+
+private class EditableTaskState(
+    val id: String = UUID.randomUUID().toString(),
+    titulo: String = "",
+    descripcion: String = "",
+    completada: Boolean = false
+) {
+    var titulo by mutableStateOf(titulo)
+    var descripcion by mutableStateOf(descripcion)
+    var completada by mutableStateOf(completada)
 }
 
 @Composable
@@ -283,6 +318,7 @@ private fun OtDetailPanel(
     val items = remember { mutableStateListOf<PresupuestoItemFormState>() }
     val tareas = remember { mutableStateListOf<EditableTaskState>() }
     var presupuestoError by remember { mutableStateOf<String?>(null) }
+    var nuevoItem by remember { mutableStateOf(PresupuestoItemFormState()) }
 
     LaunchedEffect(detalle.ot.id, vehiculosCliente) {
         notas = detalle.ot.notas.orEmpty()
@@ -298,14 +334,17 @@ private fun OtDetailPanel(
             items += PresupuestoItemFormState(
                 id = item.id,
                 tipo = item.tipo,
-                descripcion = item.descripcion,
+                titulo = item.descripcion,
+                descripcion = "",
                 cantidad = item.cantidad.toString(),
-                precio = item.precioUnit.toString()
+                precio = item.precioUnit.toString(),
+                expandido = true
             )
         }
         if (items.isEmpty()) {
-            items += PresupuestoItemFormState()
+            items += PresupuestoItemFormState(expandido = true)
         }
+        nuevoItem = PresupuestoItemFormState()
         tareas.clear()
         detalle.tareas.forEach { tarea ->
             tareas += tarea.toEditableTaskState()
@@ -506,16 +545,74 @@ private fun OtDetailPanel(
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Presupuesto", style = MaterialTheme.typography.titleSmall)
+                Text("Ítems del presupuesto", style = MaterialTheme.typography.titleSmall)
+                if (items.isEmpty()) {
+                    Text("Aún no hay ítems agregados")
+                }
                 items.forEach { item ->
                     PresupuestoItemEditor(
                         item = item,
                         soloLectura = soloLectura,
-                        onRemove = { if (!soloLectura && items.size > 1) items.remove(item) }
+                        onRemove = { if (!soloLectura) items.remove(item) }
                     )
                 }
                 if (!soloLectura) {
-                    TextButton(onClick = { items += PresupuestoItemFormState() }) {
-                        Text("Agregar ítem")
+                    Divider()
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Agregar ítem", style = MaterialTheme.typography.titleSmall)
+                        Text("Tipo de ítem del presupuesto", style = MaterialTheme.typography.bodySmall)
+                        AssistChip(
+                            onClick = {
+                                nuevoItem = nuevoItem.copy(tipo = if (nuevoItem.tipo == ItemTipo.MO) ItemTipo.REP else ItemTipo.MO)
+                            },
+                            label = { Text(if (nuevoItem.tipo == ItemTipo.MO) "Mano de obra" else "Repuestos") },
+                            colors = AssistChipDefaults.assistChipColors()
+                        )
+                        OutlinedTextField(
+                            value = nuevoItem.titulo,
+                            onValueChange = { nuevoItem = nuevoItem.copy(titulo = it) },
+                            label = { Text("Título del ítem") },
+                            enabled = !soloLectura,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = nuevoItem.descripcion,
+                            onValueChange = { nuevoItem = nuevoItem.copy(descripcion = it) },
+                            label = { Text("Descripción") },
+                            enabled = !soloLectura,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = nuevoItem.cantidad,
+                                onValueChange = { nuevoItem = nuevoItem.copy(cantidad = it.filter(Char::isDigit)) },
+                                label = { Text("Cantidad (días)") },
+                                modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                enabled = !soloLectura
+                            )
+                            OutlinedTextField(
+                                value = nuevoItem.precio,
+                                onValueChange = { nuevoItem = nuevoItem.copy(precio = it.filter(Char::isDigit)) },
+                                label = { Text("Precio/día") },
+                                modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                enabled = !soloLectura
+                            )
+                        }
+                        Button(
+                            onClick = {
+                                val cantidad = nuevoItem.cantidad.toIntOrNull()
+                                val precio = nuevoItem.precio.toIntOrNull()
+                                if (nuevoItem.titulo.isNotBlank() && cantidad != null && precio != null) {
+                                    items += nuevoItem.copy(expandido = true)
+                                    nuevoItem = PresupuestoItemFormState()
+                                }
+                            },
+                            enabled = !soloLectura
+                        ) {
+                            Text("Agregar ítem")
+                        }
                     }
                 }
                 var subtotal = 0
@@ -524,11 +621,12 @@ private fun OtDetailPanel(
                 items.forEach { item ->
                     val cantidad = item.cantidad.toIntOrNull() ?: 0
                     val precio = item.precio.toIntOrNull() ?: 0
-                    val total = cantidad * precio
-                    subtotal += total
-                    if (item.tipo == ItemTipo.REP) subtotalRep += total else subtotalMo += total
+                    val totalItem = cantidad * precio
+                    subtotal += totalItem
+                    if (item.tipo == ItemTipo.REP) subtotalRep += totalItem else subtotalMo += totalItem
                 }
-                val iva = ((subtotal * (ivaTexto.toIntOrNull() ?: 0)) / 100)
+                val ivaPorcentaje = ivaTexto.toIntOrNull() ?: 0
+                val iva = ((subtotal * ivaPorcentaje) / 100)
                 val total = subtotal + iva
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(
@@ -550,11 +648,11 @@ private fun OtDetailPanel(
                     enabled = !soloLectura,
                     modifier = Modifier.width(120.dp)
                 )
-                Text("Subtotal MO: $subtotalMo")
-                Text("Subtotal Repuestos: $subtotalRep")
-                Text("Subtotal: $subtotal")
-                Text("IVA: $iva")
-                Text("Total: $total", style = MaterialTheme.typography.bodyLarge)
+                Text("Subtotal MO: ${formatCurrency(subtotalMo)}")
+                Text("Subtotal Repuestos: ${formatCurrency(subtotalRep)}")
+                Text("Subtotal: ${formatCurrency(subtotal)}")
+                Text("IVA: ${formatCurrency(iva)}")
+                Text("Total: ${formatCurrency(total)}", style = MaterialTheme.typography.bodyLarge)
                 presupuestoError?.let { error ->
                     Text(error, color = MaterialTheme.colorScheme.error)
                 }
@@ -564,13 +662,13 @@ private fun OtDetailPanel(
                         val itemsValidos = items.mapNotNull { item ->
                             val cantidad = item.cantidad.toIntOrNull()
                             val precio = item.precio.toIntOrNull()
-                            if (cantidad == null || precio == null || item.descripcion.isBlank()) {
+                            if (cantidad == null || precio == null || item.titulo.isBlank()) {
                                 null
                             } else {
                                 PresupuestoItem(
                                     id = item.id,
                                     tipo = item.tipo,
-                                    descripcion = item.descripcion.trim(),
+                                    descripcion = buildItemDescripcion(item.titulo, item.descripcion),
                                     cantidad = cantidad,
                                     precioUnit = precio
                                 )
@@ -621,67 +719,84 @@ private fun OtDetailPanel(
 
 @Composable
 private fun PresupuestoItemEditor(item: PresupuestoItemFormState, soloLectura: Boolean, onRemove: () -> Unit) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = !soloLectura) { item.expandido = !item.expandido }
+    ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Ítem", style = MaterialTheme.typography.titleSmall)
+                Text(if (item.tipo == ItemTipo.MO) "MO" else "Repuesto", fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(8.dp))
+                Text(item.titulo.ifBlank { "Sin título" }, style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = onRemove, enabled = !soloLectura) {
                     Icon(Icons.Default.Delete, contentDescription = "Eliminar ítem")
                 }
             }
-            DropdownTextField(
-                value = when (item.tipo) {
-                    ItemTipo.MO -> "Mano de obra"
-                    ItemTipo.REP -> "Repuesto"
-                },
-                label = "Tipo",
-                expanded = item.tipoMenuExpanded,
-                onExpandedChange = { item.tipoMenuExpanded = it },
-                onDismissRequest = { item.tipoMenuExpanded = false },
-                enabled = !soloLectura,
-                modifier = Modifier.fillMaxWidth()
-            ) { closeMenu ->
-                DropdownMenuItem(text = { Text("Mano de obra") }, onClick = {
-                    if (!soloLectura) {
-                        item.tipo = ItemTipo.MO
-                        closeMenu()
-                    }
-                })
-                DropdownMenuItem(text = { Text("Repuesto") }, onClick = {
-                    if (!soloLectura) {
-                        item.tipo = ItemTipo.REP
-                        closeMenu()
-                    }
-                })
-            }
-            OutlinedTextField(
-                value = item.descripcion,
-                onValueChange = { item.descripcion = it },
-                label = { Text("Descripción") },
-                enabled = !soloLectura,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = item.cantidad,
-                    onValueChange = { item.cantidad = it.filter(Char::isDigit) },
-                    label = { Text("Cantidad") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            if (item.expandido) {
+                Text("Tipo de ítem del presupuesto", style = MaterialTheme.typography.bodySmall)
+                AssistChip(
+                    onClick = {
+                        if (!soloLectura) {
+                            item.tipo = if (item.tipo == ItemTipo.MO) ItemTipo.REP else ItemTipo.MO
+                        }
+                    },
+                    label = { Text(if (item.tipo == ItemTipo.MO) "Mano de obra" else "Repuestos") },
                     enabled = !soloLectura,
-                    modifier = Modifier.weight(1f)
+                    colors = AssistChipDefaults.assistChipColors()
                 )
                 OutlinedTextField(
-                    value = item.precio,
-                    onValueChange = { item.precio = it.filter(Char::isDigit) },
-                    label = { Text("Precio unitario") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    value = item.titulo,
+                    onValueChange = { item.titulo = it },
+                    label = { Text("Título del ítem") },
                     enabled = !soloLectura,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth()
                 )
+                OutlinedTextField(
+                    value = item.descripcion,
+                    onValueChange = { item.descripcion = it },
+                    label = { Text("Descripción") },
+                    enabled = !soloLectura,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = item.cantidad,
+                        onValueChange = { item.cantidad = it.filter(Char::isDigit) },
+                        label = { Text("Cantidad (días)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        enabled = !soloLectura,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = item.precio,
+                        onValueChange = { item.precio = it.filter(Char::isDigit) },
+                        label = { Text("Precio/día") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        enabled = !soloLectura,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                val cantidad = item.cantidad.toIntOrNull() ?: 0
+                val precio = item.precio.toIntOrNull() ?: 0
+                Text("Subtotal: ${formatCurrency(cantidad * precio)}")
             }
         }
     }
+}
+
+private fun buildItemDescripcion(titulo: String, descripcion: String): String {
+    val partes = listOf(titulo.trim(), descripcion.trim()).filter { it.isNotBlank() }
+    return partes.joinToString(" • ")
+}
+
+private fun formatCurrency(monto: Int): String {
+    val positivo = monto >= 0
+    val valor = kotlin.math.abs(monto)
+    val conMiles = valor.toString().reversed().chunked(3).joinToString(".").reversed()
+    val prefijo = if (positivo) "$ " else "-$ "
+    return prefijo + conMiles
 }
 
 // Formatea el estado interno a un nombre amigable para los usuarios.
