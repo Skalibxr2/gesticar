@@ -70,13 +70,28 @@ data class TareaOt(
     val completada: Boolean = false
 )
 
+data class SintomaInput(
+    val descripcion: String,
+    val registradoEn: Long? = null,
+    val fotos: List<String> = emptyList()
+)
+
+data class SintomaOt(
+    val id: String = UUID.randomUUID().toString(),
+    val otId: String,
+    val descripcion: String,
+    val registradoEn: Long? = null,
+    val fotos: List<String> = emptyList()
+)
+
 data class OtDetalle(
     val ot: Ot,
     val cliente: Cliente?,
     val vehiculo: Vehiculo?,
     val mecanicosAsignados: List<Usuario>,
     val presupuesto: Presupuesto,
-    val tareas: List<TareaOt>
+    val tareas: List<TareaOt>,
+    val sintomas: List<SintomaOt> = emptyList()
 )
 data class Evidencia(
     val id: String = UUID.randomUUID().toString(),

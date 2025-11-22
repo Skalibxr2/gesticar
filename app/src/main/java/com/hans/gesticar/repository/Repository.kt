@@ -5,6 +5,8 @@ import com.hans.gesticar.model.Ot
 import com.hans.gesticar.model.OtState
 import com.hans.gesticar.model.OtDetalle
 import com.hans.gesticar.model.PresupuestoItem
+import com.hans.gesticar.model.SintomaInput
+import com.hans.gesticar.model.SintomaOt
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
 import com.hans.gesticar.model.TareaOt
@@ -30,12 +32,13 @@ interface Repository {
     suspend fun actualizarVehiculoOt(otId: String, patente: String): Boolean
     suspend fun guardarPresupuesto(otId: String, items: List<PresupuestoItem>, aprobado: Boolean, ivaPorc: Int)
     suspend fun guardarTareas(otId: String, tareas: List<TareaOt>)
+    suspend fun obtenerSintomas(otId: String): List<SintomaOt>
     suspend fun crearOt(
         cliente: Cliente,
         vehiculo: Vehiculo,
         mecanicosIds: List<String>,
         presupuestoItems: List<PresupuestoItem>,
         presupuestoAprobado: Boolean,
-        sintomas: String?
+        sintomas: List<SintomaInput>
     ): Ot
 }
