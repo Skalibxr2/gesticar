@@ -977,6 +977,9 @@ class SqliteRepository(context: Context) : Repository {
             if (nuevo == OtState.EN_EJECUCION && !isPresupuestoAprobado(db, otId)) {
                 return false
             }
+            if (nuevo == OtState.EN_EJECUCION && !hasMecanicosAsignados(db, otId)) {
+                return false
+            }
             if (nuevo == OtState.FINALIZADA && currentState != OtState.EN_EJECUCION) {
                 return false
             }
@@ -998,6 +1001,16 @@ class SqliteRepository(context: Context) : Repository {
         )
         cursor.use {
             return it.moveToFirst() && it.getInt(0) == 1
+        }
+    }
+
+    private fun hasMecanicosAsignados(db: SQLiteDatabase, otId: String): Boolean {
+        val cursor = db.rawQuery(
+            "SELECT COUNT(*) FROM ot_mecanicos WHERE ot_id = ?",
+            arrayOf(otId)
+        )
+        cursor.use {
+            return it.moveToFirst() && it.getInt(0) > 0
         }
     }
 
