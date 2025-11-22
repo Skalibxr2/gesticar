@@ -185,6 +185,7 @@ class MainViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             _createOtUi.update { it.copy(guardandoCliente = true, mensajeCliente = null) }
             try {
+                val yaExistia = repo.buscarClientePorRut(cliente.rut) != null
                 repo.guardarCliente(cliente)
                 val almacenado = repo.buscarClientePorRut(cliente.rut)
                 val vehiculos = repo.obtenerVehiculosPorRut(cliente.rut)
@@ -193,7 +194,7 @@ class MainViewModel(
                         guardandoCliente = false,
                         cliente = almacenado,
                         vehiculosCliente = vehiculos,
-                        mensajeCliente = "Cliente guardado correctamente"
+                        mensajeCliente = if (yaExistia) "Cliente actualizado correctamente" else "Cliente creado correctamente"
                     )
                 }
             } catch (e: Exception) {
