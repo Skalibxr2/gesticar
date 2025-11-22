@@ -13,6 +13,7 @@ import com.hans.gesticar.model.OtState
 import com.hans.gesticar.model.Presupuesto
 import com.hans.gesticar.model.PresupuestoItem
 import com.hans.gesticar.model.Rol
+import com.hans.gesticar.model.TareaEstado
 import com.hans.gesticar.model.TareaOt
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
@@ -20,7 +21,7 @@ import com.hans.gesticar.util.normalizeRut
 import java.util.UUID
 
 private const val DB_NAME = "gesticar.db"
-private const val DB_VERSION = 4
+private const val DB_VERSION = 5
 
 class SqliteRepository(context: Context) : Repository {
     private val helper = object : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
@@ -41,6 +42,7 @@ class SqliteRepository(context: Context) : Repository {
                     rut TEXT PRIMARY KEY,
                     nombre TEXT NOT NULL,
                     correo TEXT,
+                    comuna TEXT,
                     direccion TEXT,
                     telefono TEXT
                 )
@@ -71,6 +73,29 @@ class SqliteRepository(context: Context) : Repository {
                     notas TEXT,
                     creada_en INTEGER NOT NULL,
                     FOREIGN KEY (vehiculo_patente) REFERENCES vehiculos(patente)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                CREATE TABLE ot_sintomas (
+                    id TEXT PRIMARY KEY,
+                    ot_id TEXT NOT NULL,
+                    descripcion TEXT NOT NULL,
+                    registrado_en INTEGER,
+                    FOREIGN KEY (ot_id) REFERENCES ots(id)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                CREATE TABLE ot_sintoma_fotos (
+                    id TEXT PRIMARY KEY,
+                    ot_id TEXT NOT NULL,
+                    sintoma_id TEXT NOT NULL,
+                    uri TEXT NOT NULL,
+                    FOREIGN KEY (ot_id) REFERENCES ots(id),
+                    FOREIGN KEY (sintoma_id) REFERENCES ot_sintomas(id)
                 )
                 """.trimIndent()
             )
@@ -115,7 +140,10 @@ class SqliteRepository(context: Context) : Repository {
                     ot_id TEXT NOT NULL,
                     titulo TEXT NOT NULL,
                     descripcion TEXT,
-                    completada INTEGER NOT NULL DEFAULT 0,
+                    fecha_creacion INTEGER NOT NULL,
+                    fecha_inicio INTEGER,
+                    fecha_termino INTEGER,
+                    estado TEXT NOT NULL,
                     FOREIGN KEY (ot_id) REFERENCES ots(id)
                 )
                 """.trimIndent()
@@ -135,6 +163,8 @@ class SqliteRepository(context: Context) : Repository {
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+            db.execSQL("DROP TABLE IF EXISTS ot_sintoma_fotos")
+            db.execSQL("DROP TABLE IF EXISTS ot_sintomas")
             db.execSQL("DROP TABLE IF EXISTS ot_tareas")
             db.execSQL("DROP TABLE IF EXISTS ot_mecanicos")
             db.execSQL("DROP TABLE IF EXISTS audit_logs")
@@ -150,6 +180,69 @@ class SqliteRepository(context: Context) : Repository {
 
     init {
         seedIfNeeded()
+    }
+
+    private fun insertarSintomas(db: SQLiteDatabase, otId: String, sintomas: List<SintomaInput>) {
+        db.delete("ot_sintomas", "ot_id = ?", arrayOf(otId))
+        db.delete("ot_sintoma_fotos", "ot_id = ?", arrayOf(otId))
+        sintomas.forEach { sintoma ->
+            val sintomaId = UUID.randomUUID().toString()
+            db.insert(
+                "ot_sintomas",
+                null,
+                ContentValues().apply {
+                    put("id", sintomaId)
+                    put("ot_id", otId)
+                    put("descripcion", sintoma.descripcion)
+                    put("registrado_en", sintoma.registradoEn)
+                }
+            )
+            sintoma.fotos.forEach { uri ->
+                db.insert(
+                    "ot_sintoma_fotos",
+                    null,
+                    ContentValues().apply {
+                        put("id", UUID.randomUUID().toString())
+                        put("ot_id", otId)
+                        put("sintoma_id", sintomaId)
+                        put("uri", uri)
+                    }
+                )
+            }
+        }
+    }
+
+    private fun obtenerSintomasInterno(db: SQLiteDatabase, otId: String): List<SintomaOt> {
+        val fotosPorSintoma = mutableMapOf<String, MutableList<String>>()
+        db.rawQuery(
+            "SELECT sintoma_id, uri FROM ot_sintoma_fotos WHERE ot_id = ?",
+            arrayOf(otId)
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val sintomaId = cursor.getString(0)
+                val uri = cursor.getString(1)
+                fotosPorSintoma.getOrPut(sintomaId) { mutableListOf() }.add(uri)
+            }
+        }
+
+        val cursor = db.rawQuery(
+            "SELECT id, descripcion, registrado_en FROM ot_sintomas WHERE ot_id = ?",
+            arrayOf(otId)
+        )
+        cursor.use {
+            val list = ArrayList<SintomaOt>(it.count.coerceAtLeast(0))
+            while (it.moveToNext()) {
+                val sintomaId = it.getString(0)
+                list += SintomaOt(
+                    id = sintomaId,
+                    otId = otId,
+                    descripcion = it.getString(1),
+                    registradoEn = if (it.isNull(2)) null else it.getLong(2),
+                    fotos = fotosPorSintoma[sintomaId]?.toList() ?: emptyList()
+                )
+            }
+            return list
+        }
     }
 
     private fun seedIfNeeded() {
@@ -204,6 +297,7 @@ class SqliteRepository(context: Context) : Repository {
                         put("rut", clienteUnoRut)
                         put("nombre", "Juan Pérez")
                         put("correo", "juan@example.com")
+                        put("comuna", "Santiago")
                     }
                 )
 
@@ -231,6 +325,7 @@ class SqliteRepository(context: Context) : Repository {
                         put("rut", clienteDosRut)
                         put("nombre", "María González")
                         put("correo", "maria@example.com")
+                        put("comuna", "Valparaíso")
                     }
                 )
 
@@ -262,6 +357,18 @@ class SqliteRepository(context: Context) : Repository {
                         put("estado", OtState.BORRADOR.name)
                         put("notas", "Ruidos en tren delantero")
                         put("creada_en", createdAt)
+                    }
+                )
+
+                val sintomaId = UUID.randomUUID().toString()
+                db.insertOrThrow(
+                    "ot_sintomas",
+                    null,
+                    ContentValues().apply {
+                        put("id", sintomaId)
+                        put("ot_id", otId)
+                        put("descripcion", "Ruidos en tren delantero")
+                        put("registrado_en", createdAt)
                     }
                 )
 
@@ -466,13 +573,15 @@ class SqliteRepository(context: Context) : Repository {
             }
             val presupuesto = obtenerPresupuesto(db, otId)
             val tareas = obtenerTareas(db, otId)
+            val sintomas = obtenerSintomasInterno(db, otId)
             return OtDetalle(
                 ot = ot,
                 cliente = cliente,
                 vehiculo = vehiculo,
                 mecanicosAsignados = mecanicos,
                 presupuesto = presupuesto,
-                tareas = tareas
+                tareas = tareas,
+                sintomas = sintomas
             )
         }
     }
@@ -480,7 +589,7 @@ class SqliteRepository(context: Context) : Repository {
     override suspend fun buscarClientePorRut(rut: String): Cliente? {
         val rutNormalizado = normalizeRut(rut)
         val cursor = helper.readableDatabase.rawQuery(
-            "SELECT rut, nombre, correo, direccion, telefono FROM clientes WHERE rut = ?",
+            "SELECT rut, nombre, correo, comuna, direccion, telefono FROM clientes WHERE rut = ?",
             arrayOf(rutNormalizado)
         )
         cursor.use {
@@ -489,8 +598,9 @@ class SqliteRepository(context: Context) : Repository {
                     rut = it.getString(0),
                     nombre = it.getString(1),
                     correo = it.getString(2),
-                    direccion = it.getString(3),
-                    telefono = it.getString(4)
+                    comuna = it.getString(3),
+                    direccion = it.getString(4),
+                    telefono = it.getString(5)
                 )
             } else {
                 null
@@ -538,12 +648,43 @@ class SqliteRepository(context: Context) : Repository {
         }
     }
 
+    override suspend fun buscarVehiculoPorPatente(patente: String): Vehiculo? {
+        val db = helper.readableDatabase
+        return obtenerVehiculo(db, patente.uppercase())
+    }
+
     override suspend fun guardarVehiculo(vehiculo: Vehiculo) {
         val db = helper.writableDatabase
         db.beginTransaction()
         try {
             upsertVehiculo(db, vehiculo)
             db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override suspend fun desasociarVehiculo(patente: String) {
+        val db = helper.writableDatabase
+        db.beginTransaction()
+        try {
+            val vehiculo = obtenerVehiculo(db, patente.uppercase()) ?: return
+            upsertVehiculo(db, vehiculo.copy(clienteRut = ""))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override suspend fun actualizarClienteVehiculo(patente: String, clienteRut: String): Vehiculo? {
+        val db = helper.writableDatabase
+        db.beginTransaction()
+        try {
+            val vehiculo = obtenerVehiculo(db, patente.uppercase()) ?: return null
+            val actualizado = vehiculo.copy(clienteRut = normalizeRut(clienteRut))
+            upsertVehiculo(db, actualizado)
+            db.setTransactionSuccessful()
+            return actualizado
         } finally {
             db.endTransaction()
         }
@@ -665,7 +806,10 @@ class SqliteRepository(context: Context) : Repository {
                         put("ot_id", otId)
                         put("titulo", tarea.titulo)
                         put("descripcion", tarea.descripcion)
-                        put("completada", if (tarea.completada) 1 else 0)
+                        put("fecha_creacion", tarea.fechaCreacion)
+                        put("fecha_inicio", tarea.fechaInicio)
+                        put("fecha_termino", tarea.fechaTermino)
+                        put("estado", tarea.estado.name)
                     }
                 )
             }
@@ -676,13 +820,19 @@ class SqliteRepository(context: Context) : Repository {
         }
     }
 
+    override suspend fun obtenerSintomas(otId: String): List<SintomaOt> {
+        val db = helper.readableDatabase
+        return obtenerSintomasInterno(db, otId)
+    }
+
     override suspend fun crearOt(
         cliente: Cliente,
         vehiculo: Vehiculo,
         mecanicosIds: List<String>,
         presupuestoItems: List<PresupuestoItem>,
         presupuestoAprobado: Boolean,
-        sintomas: String?
+        sintomas: String?,
+        tareas: List<TareaOt>
     ): Ot {
         val db = helper.writableDatabase
         db.beginTransaction()
@@ -711,7 +861,7 @@ class SqliteRepository(context: Context) : Repository {
                     put("numero", numero)
                     put("vehiculo_patente", patente)
                     put("estado", OtState.BORRADOR.name)
-                    put("notas", sintomas)
+                    put("notas", null as String?)
                     put("creada_en", createdAt)
                 }
             )
@@ -755,10 +905,30 @@ class SqliteRepository(context: Context) : Repository {
                 )
             }
 
+            db.delete("ot_tareas", "ot_id = ?", arrayOf(otId))
+            tareas.forEach { tarea ->
+                db.insert(
+                    "ot_tareas",
+                    null,
+                    ContentValues().apply {
+                        put("id", tarea.id)
+                        put("ot_id", otId)
+                        put("titulo", tarea.titulo)
+                        put("descripcion", tarea.descripcion)
+                        put("fecha_creacion", tarea.fechaCreacion)
+                        put("fecha_inicio", tarea.fechaInicio)
+                        put("fecha_termino", tarea.fechaTermino)
+                        put("estado", tarea.estado.name)
+                    }
+                )
+            }
+
             insertAudit(db, otId, "CREAR_OT")
             if (presupuestoAprobado) {
                 insertAudit(db, otId, "PRESUPUESTO_APROBADO")
             }
+
+            insertarSintomas(db, otId, sintomas)
 
             db.setTransactionSuccessful()
             return Ot(
@@ -767,7 +937,7 @@ class SqliteRepository(context: Context) : Repository {
                 vehiculoPatente = patente,
                 estado = OtState.BORRADOR,
                 mecanicosAsignados = mecanicosIds.distinct(),
-                notas = sintomas,
+                notas = null,
                 fechaCreacion = createdAt
             )
         } finally {
@@ -870,7 +1040,7 @@ class SqliteRepository(context: Context) : Repository {
 
     private fun obtenerCliente(db: SQLiteDatabase, rut: String): Cliente? {
         val cursor = db.rawQuery(
-            "SELECT rut, nombre, correo, direccion, telefono FROM clientes WHERE rut = ?",
+            "SELECT rut, nombre, correo, comuna, direccion, telefono FROM clientes WHERE rut = ?",
             arrayOf(rut)
         )
         cursor.use {
@@ -879,8 +1049,9 @@ class SqliteRepository(context: Context) : Repository {
                     rut = it.getString(0),
                     nombre = it.getString(1),
                     correo = it.getString(2),
-                    direccion = it.getString(3),
-                    telefono = it.getString(4)
+                    comuna = it.getString(3),
+                    direccion = it.getString(4),
+                    telefono = it.getString(5)
                 )
             } else {
                 null
@@ -954,7 +1125,7 @@ class SqliteRepository(context: Context) : Repository {
     private fun obtenerTareas(db: SQLiteDatabase, otId: String): List<TareaOt> {
         val cursor = db.rawQuery(
             """
-            SELECT id, titulo, descripcion, completada
+            SELECT id, titulo, descripcion, fecha_creacion, fecha_inicio, fecha_termino, estado
             FROM ot_tareas
             WHERE ot_id = ?
             ORDER BY titulo
@@ -964,11 +1135,16 @@ class SqliteRepository(context: Context) : Repository {
         cursor.use {
             val list = ArrayList<TareaOt>(it.count.coerceAtLeast(0))
             while (it.moveToNext()) {
+                val fechaInicio = if (it.isNull(4)) null else it.getLong(4)
+                val fechaTermino = if (it.isNull(5)) null else it.getLong(5)
                 list += TareaOt(
                     id = it.getString(0),
                     titulo = it.getString(1),
                     descripcion = it.getString(2),
-                    completada = it.getInt(3) == 1
+                    fechaCreacion = it.getLong(3),
+                    fechaInicio = fechaInicio,
+                    fechaTermino = fechaTermino,
+                    estado = TareaEstado.valueOf(it.getString(6))
                 )
             }
             return list
@@ -1017,6 +1193,7 @@ class SqliteRepository(context: Context) : Repository {
                 put("rut", rutNormalizado)
                 put("nombre", cliente.nombre)
                 put("correo", cliente.correo)
+                put("comuna", cliente.comuna)
                 put("direccion", cliente.direccion)
                 put("telefono", cliente.telefono)
             },

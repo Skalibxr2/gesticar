@@ -23,6 +23,7 @@ data class Cliente(
     val nombre: String,
     val correo: String? = null,
     val direccion: String? = null,
+    val comuna: String? = null,
     val telefono: String? = null
 )
 
@@ -63,11 +64,36 @@ data class Presupuesto(
     val total: Int get() = subtotal + iva
 }
 
+enum class TareaEstado {
+    CREADA,
+    INICIADA,
+    CANCELADA,
+    TERMINADA,
+    TERMINADA_INCOMPLETA
+}
+
 data class TareaOt(
     val id: String = UUID.randomUUID().toString(),
     val titulo: String,
     val descripcion: String? = null,
-    val completada: Boolean = false
+    val fechaCreacion: Long = System.currentTimeMillis(),
+    val fechaInicio: Long? = null,
+    val fechaTermino: Long? = null,
+    val estado: TareaEstado = TareaEstado.CREADA
+)
+
+data class SintomaInput(
+    val descripcion: String,
+    val registradoEn: Long? = null,
+    val fotos: List<String> = emptyList()
+)
+
+data class SintomaOt(
+    val id: String = UUID.randomUUID().toString(),
+    val otId: String,
+    val descripcion: String,
+    val registradoEn: Long? = null,
+    val fotos: List<String> = emptyList()
 )
 
 data class OtDetalle(
@@ -76,7 +102,8 @@ data class OtDetalle(
     val vehiculo: Vehiculo?,
     val mecanicosAsignados: List<Usuario>,
     val presupuesto: Presupuesto,
-    val tareas: List<TareaOt>
+    val tareas: List<TareaOt>,
+    val sintomas: List<SintomaOt> = emptyList()
 )
 data class Evidencia(
     val id: String = UUID.randomUUID().toString(),

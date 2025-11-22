@@ -11,6 +11,7 @@ import com.hans.gesticar.model.OtDetalle
 import com.hans.gesticar.model.Presupuesto
 import com.hans.gesticar.model.PresupuestoItem
 import com.hans.gesticar.model.Rol
+import com.hans.gesticar.model.TareaEstado
 import com.hans.gesticar.model.TareaOt
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
@@ -47,6 +48,7 @@ class FakeRepository : Repository {
     val evidencias = mutableListOf<Evidencia>()
     val audit = mutableListOf<AuditLog>()
     val tareas = mutableMapOf<String, MutableList<TareaOt>>()
+    val sintomasPorOt = mutableMapOf<String, MutableList<SintomaOt>>()
 
     init {
         // Seed mínimo
@@ -87,8 +89,14 @@ class FakeRepository : Repository {
         agregarItemPresupuesto(ot.id, ItemTipo.MO, "Diagnóstico", 1, 15000)
         agregarItemPresupuesto(ot.id, ItemTipo.REP, "Bujías", 4, 8000)
         tareas[ot.id] = mutableListOf(
-            TareaOt(titulo = "Revisión inicial", descripcion = "Verificar tren delantero"),
-            TareaOt(titulo = "Cambio de bujías", completada = false)
+            TareaOt(
+                titulo = "Revisión inicial",
+                descripcion = "Verificar tren delantero",
+                estado = TareaEstado.TERMINADA,
+                fechaInicio = System.currentTimeMillis(),
+                fechaTermino = System.currentTimeMillis()
+            ),
+            TareaOt(titulo = "Cambio de bujías", estado = TareaEstado.CREADA)
         )
     }
 
@@ -111,7 +119,8 @@ class FakeRepository : Repository {
     private fun crearOtInternal(
         vehiculoPatente: String,
         notas: String?,
-        mecanicos: List<String>
+        mecanicos: List<String>,
+        tareasIniciales: List<TareaOt> = emptyList()
     ): Ot {
         val ot = Ot(
             numero = nextOtNumber(),
@@ -122,7 +131,7 @@ class FakeRepository : Repository {
         )
         ots += ot
         presupuestos[ot.id] = Presupuesto(otId = ot.id)
-        tareas[ot.id] = mutableListOf()
+        tareas[ot.id] = tareasIniciales.map { it.copy() }.toMutableList()
         log(ot.id, "CREAR_OT")
         return ot
     }
@@ -133,7 +142,8 @@ class FakeRepository : Repository {
         mecanicosIds: List<String>,
         presupuestoItems: List<PresupuestoItem>,
         presupuestoAprobado: Boolean,
-        sintomas: String?
+        sintomas: String?,
+        tareas: List<TareaOt>
     ): Ot {
         guardarCliente(cliente)
 
@@ -144,7 +154,7 @@ class FakeRepository : Repository {
         )
         guardarVehiculo(vehiculoNormalizado)
 
-        val ot = crearOtInternal(vehiculoNormalizado.patente, sintomas, mecanicosIds)
+        val ot = crearOtInternal(vehiculoNormalizado.patente, sintomas, mecanicosIds, tareas)
 
         val presupuesto = presupuestos.getValue(ot.id)
         presupuesto.items.clear()
@@ -172,10 +182,33 @@ class FakeRepository : Repository {
         return vehiculos.filter { normalizeRut(it.clienteRut) == rutNormalizado }
     }
 
+    override suspend fun buscarVehiculoPorPatente(patente: String): Vehiculo? {
+        val patenteUpper = patente.uppercase()
+        return vehiculos.firstOrNull { it.patente.equals(patenteUpper, ignoreCase = true) }
+    }
+
     override suspend fun guardarVehiculo(vehiculo: Vehiculo) {
         val patenteUpper = vehiculo.patente.uppercase()
         vehiculos.removeAll { it.patente.equals(patenteUpper, ignoreCase = true) }
         vehiculos += vehiculo.copy(patente = patenteUpper, clienteRut = normalizeRut(vehiculo.clienteRut))
+    }
+
+    override suspend fun desasociarVehiculo(patente: String) {
+        val patenteUpper = patente.uppercase()
+        val index = vehiculos.indexOfFirst { it.patente.equals(patenteUpper, ignoreCase = true) }
+        if (index >= 0) {
+            val vehiculo = vehiculos[index]
+            vehiculos[index] = vehiculo.copy(clienteRut = "")
+        }
+    }
+
+    override suspend fun actualizarClienteVehiculo(patente: String, clienteRut: String): Vehiculo? {
+        val patenteUpper = patente.uppercase()
+        val index = vehiculos.indexOfFirst { it.patente.equals(patenteUpper, ignoreCase = true) }
+        if (index < 0) return null
+        val actualizado = vehiculos[index].copy(clienteRut = normalizeRut(clienteRut))
+        vehiculos[index] = actualizado
+        return actualizado
     }
 
     fun obtenerPresupuesto(otId: String): Presupuesto = presupuestos.getValue(otId)
@@ -252,8 +285,13 @@ class FakeRepository : Repository {
             vehiculo = vehiculo,
             mecanicosAsignados = mecanicos,
             presupuesto = presupuesto,
-            tareas = tareasGuardadas
+            tareas = tareasGuardadas,
+            sintomas = sintomasPorOt[otId]?.map { it.copy() } ?: emptyList()
         )
+    }
+
+    override suspend fun obtenerSintomas(otId: String): List<SintomaOt> {
+        return sintomasPorOt[otId]?.map { it.copy() } ?: emptyList()
     }
 
     override suspend fun actualizarNotasOt(otId: String, notas: String?) {
