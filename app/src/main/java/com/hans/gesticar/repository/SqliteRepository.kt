@@ -18,6 +18,8 @@ import com.hans.gesticar.model.TareaOt
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
 import com.hans.gesticar.util.normalizeRut
+import com.hans.gesticar.model.SintomaInput
+import com.hans.gesticar.model.SintomaOt
 import java.util.UUID
 
 private const val DB_NAME = "gesticar.db"

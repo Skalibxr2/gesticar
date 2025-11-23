@@ -287,7 +287,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
 
     LaunchedEffect(uiState.guardandoVehiculo, uiState.mensajeVehiculo) {
         if (!uiState.guardandoVehiculo && uiState.mensajeVehiculo != null &&
-            !uiState.mensajeVehiculo.contains("error", ignoreCase = true)
+            !uiState.mensajeVehiculo!!.contains("error", ignoreCase = true)
         ) {
             mostrarFormularioVehiculo = false
             esEdicionVehiculo = false
