@@ -318,7 +318,7 @@ class MainViewModel(
         mecanicosIds: List<String>,
         presupuestoItems: List<PresupuestoItem>,
         presupuestoAprobado: Boolean,
-        sintomas: String?,
+        sintomas: List<SintomaInput>,
         tareas: List<TareaOt>,
         iniciar: Boolean
     ) {
