@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.rememberScrollState
@@ -79,6 +80,8 @@ import com.hans.gesticar.util.isRutValid
 import com.hans.gesticar.util.normalizeRut
 import com.hans.gesticar.util.sanitizeRutInput
 import java.util.UUID
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 private class PresupuestoItemForm(
     val id: String = UUID.randomUUID().toString(),
@@ -115,6 +118,22 @@ private fun PresupuestoItemForm.copy(
     expandido = expandido
 )
 
+private class SymptomForm(
+    descripcion: String = "",
+    fechaTexto: String = "",
+    fotos: List<Uri> = emptyList()
+) {
+    var descripcion by mutableStateOf(descripcion)
+    var fechaTexto by mutableStateOf(fechaTexto)
+    val fotos = mutableStateListOf<Uri>().apply { addAll(fotos) }
+}
+
+private val symptomFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+
+private fun parseSymptomTimestamp(text: String): Long? = text.takeIf { it.isNotBlank() }?.let {
+    runCatching { symptomFormatter.parse(it)?.time }.getOrNull()
+}
+
 @Composable
 fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
     val uiState by vm.createOtUi.collectAsState()
@@ -138,11 +157,22 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
     var kilometraje by rememberSaveable { mutableStateOf("") }
     var combustible by rememberSaveable { mutableStateOf("") }
 
+    var detallesClienteExpandido by rememberSaveable { mutableStateOf(false) }
+    var modoEdicionCliente by rememberSaveable { mutableStateOf(false) }
+    var creandoCliente by rememberSaveable { mutableStateOf(false) }
+    var mostrarFormularioVehiculo by rememberSaveable { mutableStateOf(false) }
+    var esEdicionVehiculo by rememberSaveable { mutableStateOf(false) }
+    var flujoNuevoVehiculo by rememberSaveable { mutableStateOf(false) }
+    var patenteBusqueda by rememberSaveable { mutableStateOf("") }
+    var mostrarConfirmarCancelarRegistro by rememberSaveable { mutableStateOf(false) }
+    var vehiculoInfoDialog by remember { mutableStateOf<Vehiculo?>(null) }
+
     var presupuestoAprobado by rememberSaveable { mutableStateOf(false) }
     val items = remember { mutableStateListOf<PresupuestoItemForm>() }
     val seleccionMecanicos = remember { mutableStateListOf<String>() }
     var vehiculoSeleccionado by rememberSaveable { mutableStateOf<String?>(null) }
     val sintomas = remember { mutableStateListOf(SymptomForm()) }
+    val tareas = remember { mutableStateListOf(EditableTaskState()) }
 
     LaunchedEffect(uiState.exito) {
         if (uiState.exito) {
@@ -163,9 +193,18 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             detallesClienteExpandido = false
             modoEdicionCliente = false
             creandoCliente = false
+            mostrarFormularioVehiculo = false
+            esEdicionVehiculo = false
+            flujoNuevoVehiculo = false
+            patenteBusqueda = ""
+            vehiculoInfoDialog = null
             seleccionMecanicos.clear()
             vehiculoSeleccionado = null
             items.clear()
+            sintomas.clear()
+            sintomas += SymptomForm()
+            tareas.clear()
+            tareas += EditableTaskState()
         }
     }
 
@@ -503,10 +542,18 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             onToggleAprobado = { presupuestoAprobado = !presupuestoAprobado }
         )
 
+        TasksSection(
+            tasks = tareas,
+            soloLectura = false,
+            title = "Tareas preventivas o correctivas",
+            modifier = Modifier.fillMaxWidth()
+        )
+
         val anioInt = anio.toIntOrNull()
         val kmInt = kilometraje.toIntOrNull()
         val clienteValido = rutNormalizado != null && nombre.isNotBlank()
-        val vehiculoValido = patente.isNotBlank() && marca.isNotBlank() && modelo.isNotBlank() && anioInt != null && anio.length == 4
+        val vehiculoValido =
+            patente.isNotBlank() && marca.isNotBlank() && modelo.isNotBlank() && anioInt != null && anio.length == 4
         val presupuestoItemsValidos = items.mapNotNull { form ->
             val cantidadInt = form.cantidad.toIntOrNull()
             val precioInt = form.precioUnitario.toIntOrNull()
@@ -566,7 +613,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
                         mecanicosIds = seleccionMecanicos.toList(),
                         presupuestoItems = presupuestoItemsValidos,
                         presupuestoAprobado = presupuestoAprobado,
-                        sintomas = sintomas.takeIf { it.isNotBlank() },
+                        sintomas = sintomasValidos,
                         tareas = tareasValidas,
                         iniciar = false
                     )
@@ -607,7 +654,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
                         mecanicosIds = seleccionMecanicos.toList(),
                         presupuestoItems = presupuestoItemsValidos,
                         presupuestoAprobado = true,
-                        sintomas = sintomas.takeIf { it.isNotBlank() },
+                        sintomas = sintomasValidos,
                         tareas = tareasValidas,
                         iniciar = true
                     )
@@ -627,6 +674,26 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             Text("Volver al menú principal")
         }
         Spacer(modifier = Modifier.height(8.dp))
+    }
+
+    vehiculoInfoDialog?.let { vehiculo ->
+        AlertDialog(
+            onDismissRequest = { vehiculoInfoDialog = null },
+            confirmButton = {
+                TextButton(onClick = { vehiculoInfoDialog = null }) { Text("Cerrar") }
+            },
+            title = { Text("Vehículo ${vehiculo.patente}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Marca: ${vehiculo.marca}")
+                    Text("Modelo: ${vehiculo.modelo}")
+                    Text("Año: ${vehiculo.anio}")
+                    vehiculo.color?.let { Text("Color: $it") }
+                    vehiculo.kilometraje?.let { Text("Kilometraje: ${it} km") }
+                    vehiculo.combustible?.let { Text("Combustible: $it") }
+                }
+            }
+        )
     }
 }
 
@@ -1044,27 +1111,73 @@ private fun VehiculoSection(
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold
                 )
-            OutlinedTextField(
-                value = combustible,
-                onValueChange = onCombustibleChange,
-                label = { Text("Combustible") },
-                modifier = Modifier.weight(1f)
-            )
-            TasksSection(
-                tasks = tareas,
-                soloLectura = false,
-                title = "Tareas preventivas o correctivas",
-                modifier = Modifier.fillMaxWidth()
-            )
-            if (guardandoVehiculo) {
-                Text("Guardando vehículo...", style = MaterialTheme.typography.bodySmall)
-            } else if (mensajeVehiculo != null) {
-                val esError = mensajeVehiculo.contains("error", ignoreCase = true)
-                Text(
-                    mensajeVehiculo,
-                    color = if (esError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodySmall
+                OutlinedTextField(
+                    value = patente,
+                    onValueChange = onPatenteChange,
+                    label = { Text("Patente") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !patenteSoloLectura
                 )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = marca,
+                        onValueChange = onMarcaChange,
+                        label = { Text("Marca") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = modelo,
+                        onValueChange = onModeloChange,
+                        label = { Text("Modelo") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = anio,
+                        onValueChange = onAnioChange,
+                        label = { Text("Año") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                    OutlinedTextField(
+                        value = color,
+                        onValueChange = onColorChange,
+                        label = { Text("Color") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = kilometraje,
+                        onValueChange = onKilometrajeChange,
+                        label = { Text("Kilometraje") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                    OutlinedTextField(
+                        value = combustible,
+                        onValueChange = onCombustibleChange,
+                        label = { Text("Combustible") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = onGuardarVehiculo) {
+                        Text(if (esEdicion) "Guardar cambios" else "Guardar vehículo")
+                    }
+                    TextButton(onClick = onCancelarEdicion) { Text("Cancelar") }
+                }
+                if (guardandoVehiculo) {
+                    Text("Guardando vehículo...", style = MaterialTheme.typography.bodySmall)
+                } else if (mensajeVehiculo != null) {
+                    val esError = mensajeVehiculo.contains("error", ignoreCase = true)
+                    Text(
+                        mensajeVehiculo,
+                        color = if (esError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
         }
     }

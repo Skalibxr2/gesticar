@@ -11,6 +11,8 @@ import com.hans.gesticar.model.OtDetalle
 import com.hans.gesticar.model.Presupuesto
 import com.hans.gesticar.model.PresupuestoItem
 import com.hans.gesticar.model.Rol
+import com.hans.gesticar.model.SintomaInput
+import com.hans.gesticar.model.SintomaOt
 import com.hans.gesticar.model.TareaEstado
 import com.hans.gesticar.model.TareaOt
 import com.hans.gesticar.model.Usuario
@@ -142,7 +144,7 @@ class FakeRepository : Repository {
         mecanicosIds: List<String>,
         presupuestoItems: List<PresupuestoItem>,
         presupuestoAprobado: Boolean,
-        sintomas: String?,
+        sintomas: List<SintomaInput>,
         tareas: List<TareaOt>
     ): Ot {
         guardarCliente(cliente)
@@ -154,7 +156,17 @@ class FakeRepository : Repository {
         )
         guardarVehiculo(vehiculoNormalizado)
 
-        val ot = crearOtInternal(vehiculoNormalizado.patente, sintomas, mecanicosIds, tareas)
+        val notas = sintomas.joinToString("\n") { it.descripcion }
+        val ot = crearOtInternal(vehiculoNormalizado.patente, notas, mecanicosIds, tareas)
+
+        sintomasPorOt[ot.id] = sintomas.map { input ->
+            SintomaOt(
+                otId = ot.id,
+                descripcion = input.descripcion,
+                registradoEn = input.registradoEn,
+                fotos = input.fotos
+            )
+        }.toMutableList()
 
         val presupuesto = presupuestos.getValue(ot.id)
         presupuesto.items.clear()
