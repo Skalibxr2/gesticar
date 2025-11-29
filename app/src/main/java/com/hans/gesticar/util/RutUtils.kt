@@ -35,13 +35,19 @@ fun formatRutInput(raw: String): String {
     val cleaned = sanitizeRutInput(raw).take(9)
     if (cleaned.isEmpty()) return ""
 
-    // Se muestra el guion solo cuando el RUT tiene al menos 7 dígitos + DV.
     if (cleaned.length <= 1) return cleaned
 
     val cuerpo = cleaned.dropLast(1)
     val dv = cleaned.last()
 
-    return if (cuerpo.length >= 7) "$cuerpo-$dv" else cleaned
+    val tieneCuerpoCompleto = cuerpo.length >= 7
+    val tieneDvProbable = when {
+        cleaned.length >= 9 -> true // 8 dígitos + DV
+        cuerpo.length == 7 -> dv.equals(calcularDv(cuerpo), ignoreCase = true) // 7 dígitos + DV
+        else -> false
+    }
+
+    return if (tieneCuerpoCompleto && tieneDvProbable) "$cuerpo-$dv" else cleaned
 }
 
 fun sanitizeRutInput(raw: String): String {
