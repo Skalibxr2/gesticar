@@ -17,6 +17,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
@@ -43,6 +45,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -64,6 +68,7 @@ import com.hans.gesticar.util.formatRutInput
 import com.hans.gesticar.util.normalizeRut
 import com.hans.gesticar.viewmodel.MainViewModel
 import com.hans.gesticar.viewmodel.DetalleMensajes
+import com.hans.gesticar.viewmodel.SearchResult
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -80,11 +85,21 @@ fun SearchOtScreen(vm: MainViewModel) {
     var estadoExpanded by remember { mutableStateOf(false) }
     var estadoSeleccionado by remember { mutableStateOf<OtState?>(null) }
     var filtrosExpandido by rememberSaveable { mutableStateOf(true) }
+    var resultadosExpandido by rememberSaveable { mutableStateOf(false) }
     var filtroError by rememberSaveable { mutableStateOf<String?>(null) }
+    val filtrosFocusRequester = remember { FocusRequester() }
+    var solicitarFocoFiltros by remember { mutableStateOf(false) }
 
     // Al seleccionar una OT mostramos solo el detalle para aprovechar la pantalla completa.
     LaunchedEffect(ui.detalleSeleccionado?.ot?.id) {
         filtrosExpandido = ui.detalleSeleccionado == null
+    }
+
+    LaunchedEffect(solicitarFocoFiltros) {
+        if (solicitarFocoFiltros) {
+            filtrosFocusRequester.requestFocus()
+            solicitarFocoFiltros = false
+        }
     }
 
     Column(
@@ -136,7 +151,9 @@ fun SearchOtScreen(vm: MainViewModel) {
                                 value = nroTexto,
                                 onValueChange = { nroTexto = it.filter(Char::isDigit) },
                                 label = { Text("N° OT") },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .focusRequester(filtrosFocusRequester)
                             )
                             OutlinedTextField(
                                 value = patente,
@@ -200,6 +217,7 @@ fun SearchOtScreen(vm: MainViewModel) {
                                 }
 
                                 filtroError = null
+                                resultadosExpandido = true
                                 vm.buscarPorFiltros(numero, patenteFiltro, rutFiltro, estadoFiltro)
                             }) {
                                 Text("Buscar")
@@ -224,15 +242,75 @@ fun SearchOtScreen(vm: MainViewModel) {
         }
 
         Divider()
-        Text("Resultados", style = MaterialTheme.typography.titleMedium)
-        if (ui.resultadosBusqueda.isEmpty()) {
-            Text("Sin resultados para los filtros seleccionados")
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(ui.resultadosBusqueda) { ot ->
-                    val seleccionado = ui.detalleSeleccionado?.ot?.id == ot.id
-                    OtCard(ot = ot, seleccionado = seleccionado) {
-                        vm.seleccionarOt(ot.id)
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Resultados", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Se mostrarán las órdenes encontradas.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    AssistChip(
+                        onClick = { resultadosExpandido = !resultadosExpandido },
+                        label = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (resultadosExpandido) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                    contentDescription = null
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(if (resultadosExpandido) "Contraer" else "Expandir")
+                            }
+                        }
+                    )
+                }
+
+                if (resultadosExpandido) {
+                    if (ui.resultadosBusqueda.isEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("No se encontraron resultados para tu búsqueda")
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(onClick = {
+                                    vm.limpiarResultados()
+                                    resultadosExpandido = false
+                                    filtrosExpandido = true
+                                    solicitarFocoFiltros = true
+                                }) {
+                                    Text("Realizar nueva búsqueda")
+                                }
+                                TextButton(onClick = {
+                                    vm.limpiarResultados()
+                                    resultadosExpandido = false
+                                    filtrosExpandido = true
+                                    solicitarFocoFiltros = true
+                                }) {
+                                    Text("Limpiar resultados")
+                                }
+                            }
+                        }
+                    } else {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(ui.resultadosBusqueda) { resultado ->
+                                val seleccionado = ui.detalleSeleccionado?.ot?.id == resultado.ot.id
+                                OtCard(resultado = resultado, seleccionado = seleccionado) {
+                                    vm.seleccionarOt(resultado.ot.id)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -267,20 +345,24 @@ fun SearchOtScreen(vm: MainViewModel) {
 }
 
 @Composable
-private fun OtCard(ot: Ot, seleccionado: Boolean, onClick: () -> Unit) {
+private fun OtCard(resultado: SearchResult, seleccionado: Boolean, onClick: () -> Unit) {
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            val fechaFormateada = remember(ot.fechaCreacion) {
+            val fechaFormateada = remember(resultado.ot.fechaCreacion) {
                 val formatter = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
-                formatter.format(Date(ot.fechaCreacion))
+                formatter.format(Date(resultado.ot.fechaCreacion))
             }
-            Text("OT #${ot.numero}", style = MaterialTheme.typography.titleMedium)
+            Text("OT ${resultado.ot.numero}", style = MaterialTheme.typography.titleMedium)
+            resultado.clienteNombre?.let { nombre ->
+                Text("Cliente: $nombre", style = MaterialTheme.typography.bodySmall)
+            }
+            Text("Patente: ${resultado.patente}", style = MaterialTheme.typography.bodySmall)
+            Text("Estado: ${resultado.estado.toReadableName()}")
             Text("Creada el: $fechaFormateada", style = MaterialTheme.typography.bodySmall)
-            Text("Estado: ${ot.estado.toReadableName()}")
             if (seleccionado) {
                 Text("Seleccionada", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
             }
@@ -427,7 +509,7 @@ private fun OtDetailPanel(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Detalle OT #${detalle.ot.numero}", style = MaterialTheme.typography.titleMedium)
+                Text("OT ${detalle.ot.numero}", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = onCerrar) { Text("Cerrar") }
             }
@@ -788,6 +870,11 @@ private fun OtDetailPanel(
             Divider()
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                if (detalle.ot.estado == OtState.BORRADOR) {
+                    Button(onClick = { onGuardarDatos(notas, mecanicosSeleccionados, patente) }, enabled = !soloLectura) {
+                        Text("Guardar borrador")
+                    }
+                }
                 Button(onClick = onIniciar, enabled = puedeIniciar && !soloLectura) {
                     Text("Iniciar OT")
                 }

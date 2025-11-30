@@ -38,13 +38,20 @@ data class UiState(
     val usuarioActual: Usuario? = null,
     val displayName: String? = null,
     val ots: List<Ot> = emptyList(),
-    val resultadosBusqueda: List<Ot> = emptyList(),
+    val resultadosBusqueda: List<SearchResult> = emptyList(),
     val mensaje: String? = null,
     val detalleSeleccionado: OtDetalle? = null,
     val mecanicosDisponibles: List<Usuario> = emptyList(),
     val vehiculosCliente: List<Vehiculo> = emptyList(),
     val detalleMensajes: DetalleMensajes = DetalleMensajes(),
     val cargandoDetalle: Boolean = false
+)
+
+data class SearchResult(
+    val ot: Ot,
+    val clienteNombre: String?,
+    val patente: String,
+    val estado: OtState
 )
 
 data class CreateOtUiState(
@@ -93,7 +100,18 @@ class MainViewModel(
         val mecanicos = repo.obtenerMecanicos()
         val ots = repo.obtenerOts()
         val resultadosActualizados = if (detalle != null) {
-            _ui.value.resultadosBusqueda.map { if (it.id == detalle.ot.id) detalle.ot else it }
+            _ui.value.resultadosBusqueda.map { resultado ->
+                if (resultado.ot.id == detalle.ot.id) {
+                    resultado.copy(
+                        ot = detalle.ot,
+                        clienteNombre = detalle.cliente?.nombre,
+                        patente = detalle.vehiculo?.patente ?: detalle.ot.vehiculoPatente,
+                        estado = detalle.ot.estado
+                    )
+                } else {
+                    resultado
+                }
+            }
         } else {
             _ui.value.resultadosBusqueda
         }
@@ -458,7 +476,7 @@ class MainViewModel(
             }
             _ui.update {
                 it.copy(
-                    resultadosBusqueda = resultados,
+                    resultadosBusqueda = mapearResultados(resultados),
                     mensaje = mensaje,
                     detalleSeleccionado = null,
                     cargandoDetalle = false,
@@ -490,7 +508,7 @@ class MainViewModel(
             val mensaje = if (lista.isEmpty()) "Sin resultados" else null
             _ui.update {
                 it.copy(
-                    resultadosBusqueda = lista,
+                    resultadosBusqueda = mapearResultados(lista),
                     mensaje = mensaje,
                     detalleSeleccionado = null,
                     cargandoDetalle = false,
@@ -522,7 +540,7 @@ class MainViewModel(
             val mensaje = if (lista.isEmpty()) "Sin resultados" else null
             _ui.update {
                 it.copy(
-                    resultadosBusqueda = lista,
+                    resultadosBusqueda = mapearResultados(lista),
                     mensaje = mensaje,
                     detalleSeleccionado = null,
                     cargandoDetalle = false,
@@ -554,7 +572,7 @@ class MainViewModel(
             val mensaje = if (lista.isEmpty()) "Sin resultados" else null
             _ui.update {
                 it.copy(
-                    resultadosBusqueda = lista,
+                    resultadosBusqueda = mapearResultados(lista),
                     mensaje = mensaje,
                     detalleSeleccionado = null,
                     cargandoDetalle = false,
@@ -597,7 +615,7 @@ class MainViewModel(
             val mensaje = if (resultados.isEmpty()) "Sin resultados" else null
             _ui.update {
                 it.copy(
-                    resultadosBusqueda = resultados,
+                    resultadosBusqueda = mapearResultados(resultados),
                     mensaje = mensaje,
                     detalleSeleccionado = null,
                     cargandoDetalle = false,
@@ -605,6 +623,32 @@ class MainViewModel(
                     detalleMensajes = DetalleMensajes()
                 )
             }
+        }
+    }
+
+    private suspend fun construirResultado(ot: Ot): SearchResult {
+        val vehiculo = repo.buscarVehiculoPorPatente(ot.vehiculoPatente)
+        val cliente = vehiculo?.let { v -> repo.buscarClientePorRut(v.clienteRut) }
+        return SearchResult(
+            ot = ot,
+            clienteNombre = cliente?.nombre,
+            patente = vehiculo?.patente ?: ot.vehiculoPatente,
+            estado = ot.estado
+        )
+    }
+
+    private suspend fun mapearResultados(ots: List<Ot>): List<SearchResult> = ots.map { construirResultado(it) }
+
+    fun limpiarResultados() {
+        _ui.update {
+            it.copy(
+                resultadosBusqueda = emptyList(),
+                mensaje = null,
+                detalleSeleccionado = null,
+                cargandoDetalle = false,
+                vehiculosCliente = emptyList(),
+                detalleMensajes = DetalleMensajes()
+            )
         }
     }
 
