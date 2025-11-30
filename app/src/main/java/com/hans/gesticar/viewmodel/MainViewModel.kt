@@ -766,6 +766,45 @@ class MainViewModel(
         }
     }
 
+    fun cancelarOt(otId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val ok = repo.cambiarEstado(otId, OtState.CANCELADA)
+            if (!ok) {
+                _ui.update {
+                    it.copy(
+                        detalleMensajes = DetalleMensajes(
+                            estado = SectionMessage("No fue posible cancelar la OT", isError = true)
+                        )
+                    )
+                }
+            } else {
+                refreshOts()
+                actualizarDetalle(otId, DetalleMensajes(estado = SectionMessage("OT cancelada")))
+            }
+        }
+    }
+
+    fun eliminarBorrador(otId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val ok = repo.eliminarOt(otId)
+            val mensaje = if (ok) "Borrador eliminado" else "No se pudo eliminar la OT"
+            val refreshed = repo.obtenerOts()
+            val resultadosFiltrados = _ui.value.resultadosBusqueda.filterNot { it.id == otId }
+            val limpiarDetalle = _ui.value.detalleSeleccionado?.ot?.id == otId
+            _ui.update {
+                it.copy(
+                    mensaje = mensaje,
+                    resultadosBusqueda = resultadosFiltrados,
+                    detalleSeleccionado = if (limpiarDetalle) null else it.detalleSeleccionado,
+                    cargandoDetalle = if (limpiarDetalle) false else it.cargandoDetalle,
+                    vehiculosCliente = if (limpiarDetalle) emptyList() else it.vehiculosCliente,
+                    detalleMensajes = if (limpiarDetalle) DetalleMensajes() else it.detalleMensajes,
+                    ots = refreshed
+                )
+            }
+        }
+    }
+
     // --- Acciones admin ---
     fun aprobarPresupuesto(otId: String) {
         viewModelScope.launch(Dispatchers.IO) {

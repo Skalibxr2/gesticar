@@ -29,9 +29,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberSaveable
-
-import androidx.compose.runtime.snapshots.SnapshotStateList
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -105,7 +102,8 @@ fun TasksSection(
     onToggleExpandido: () -> Unit,
     onToggleFormulario: () -> Unit,
     onAddTask: ((EditableTaskState) -> Unit)? = null,
-    onRemoveTask: ((EditableTaskState) -> Unit)? = null
+    onRemoveTask: ((EditableTaskState) -> Unit)? = null,
+    permiteEliminar: Boolean = true
 ) {
     var nuevaDescripcion by rememberSaveable { mutableStateOf("") }
     var nuevoDetalle by rememberSaveable { mutableStateOf("") }
@@ -273,10 +271,11 @@ fun TasksSection(
                                 tasks.forEach { it.expandido = it.id == tarea.id && debeExpandir }
                             },
                             onRemove = {
-                                if (!soloLectura) {
+                                if (!soloLectura && permiteEliminar) {
                                     onRemoveTask?.invoke(tarea) ?: tasks.remove(tarea)
                                 }
-                            }
+                            },
+                            permiteEliminar = permiteEliminar
                         )
                     }
                 }
@@ -292,6 +291,7 @@ private fun TaskItemCard(
     permiteCambiarEstado: Boolean,
     onExpand: () -> Unit,
     onRemove: () -> Unit,
+    permiteEliminar: Boolean,
     modifier: Modifier = Modifier
 ) {
     ElevatedCard(modifier = modifier.fillMaxWidth()) {
@@ -321,7 +321,7 @@ private fun TaskItemCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                IconButton(onClick = onRemove, enabled = !soloLectura) {
+                IconButton(onClick = onRemove, enabled = !soloLectura && permiteEliminar) {
                     Icon(imageVector = Icons.Default.Delete, contentDescription = "Eliminar tarea")
                 }
             }

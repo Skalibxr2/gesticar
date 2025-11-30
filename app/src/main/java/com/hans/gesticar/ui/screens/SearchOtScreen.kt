@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
@@ -29,11 +30,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -56,6 +59,7 @@ import com.hans.gesticar.model.OtDetalle
 import com.hans.gesticar.model.OtState
 import com.hans.gesticar.model.PresupuestoItem
 import com.hans.gesticar.model.Rol
+import com.hans.gesticar.model.TareaEstado
 import com.hans.gesticar.model.TareaOt
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
@@ -335,6 +339,8 @@ fun SearchOtScreen(vm: MainViewModel) {
                 onGuardarTareas = { tareas -> vm.guardarTareas(detalle.ot.id, tareas) },
                 onIniciar = { vm.iniciarOt(detalle.ot.id) },
                 onFinalizar = { vm.finalizarOt(detalle.ot.id) },
+                onCancelar = { vm.cancelarOt(detalle.ot.id) },
+                onEliminarBorrador = { vm.eliminarBorrador(detalle.ot.id) },
                 onCerrar = {
                     filtrosExpandido = true
                     vm.limpiarSeleccion()
@@ -427,6 +433,8 @@ private fun OtDetailPanel(
     onGuardarTareas: (List<TareaOt>) -> Unit,
     onIniciar: () -> Unit,
     onFinalizar: () -> Unit,
+    onCancelar: () -> Unit,
+    onEliminarBorrador: () -> Unit,
     onCerrar: () -> Unit
 ) {
     val scrollState = rememberScrollState()
@@ -479,22 +487,38 @@ private fun OtDetailPanel(
         mostrarFormularioTareas = false
     }
 
+    val enEjecucion = detalle.ot.estado == OtState.EN_EJECUCION
     val vehiculoEditable = when (detalle.ot.estado) {
-        OtState.EN_EJECUCION, OtState.FINALIZADA -> false
+        OtState.EN_EJECUCION, OtState.FINALIZADA, OtState.CANCELADA -> false
         else -> true
     }
-    val permiteCambiarEstadoTareas = detalle.ot.estado == OtState.EN_EJECUCION
+    val permiteCambiarEstadoTareas = enEjecucion
     // Una OT finalizada queda solo para consulta; bloqueamos todas las acciones.
-    val soloLectura = detalle.ot.estado == OtState.FINALIZADA
+    val soloLectura = detalle.ot.estado == OtState.FINALIZADA || detalle.ot.estado == OtState.CANCELADA
+    val permiteEliminarTareas = !soloLectura && detalle.ot.estado != OtState.EN_EJECUCION
     val tieneItemsValidos = items.any { item ->
         val cantidad = item.cantidad.toIntOrNull() ?: 0
         val precio = item.precio.toIntOrNull() ?: 0
         item.descripcion.isNotBlank() && cantidad > 0 && precio > 0
     }
-    val puedeIniciar = detalle.ot.estado !in listOf(OtState.EN_EJECUCION, OtState.FINALIZADA) &&
+    val puedeIniciar = detalle.ot.estado !in listOf(OtState.EN_EJECUCION, OtState.FINALIZADA, OtState.CANCELADA) &&
         presupuestoAprobado && tieneItemsValidos &&
         detalle.cliente != null && patente.isNotBlank() && mecanicosSeleccionados.isNotEmpty()
     val puedeFinalizar = detalle.ot.estado == OtState.EN_EJECUCION
+    var mostrarErroresDatos by remember { mutableStateOf(false) }
+    var mensajeValidacionEstado by remember { mutableStateOf<String?>(null) }
+    val patenteVacia = patente.isBlank()
+    val sinMecanicos = mecanicosSeleccionados.isEmpty()
+    val notasVacias = notas.isBlank()
+    var mostrarConfirmacionEliminar by remember { mutableStateOf(false) }
+    var mostrarConfirmacionCancelar by remember { mutableStateOf(false) }
+    val guardarDatosValidados = {
+        mostrarErroresDatos = true
+        mensajeValidacionEstado = null
+        if (!patenteVacia && !sinMecanicos && !notasVacias) {
+            onGuardarDatos(notas, mecanicosSeleccionados.toList(), patente)
+        }
+    }
 
     ElevatedCard(
         modifier = Modifier
@@ -564,11 +588,27 @@ private fun OtDetailPanel(
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
+                if (mostrarErroresDatos && patenteVacia) {
+                    Text(
+                        "Selecciona un vehículo para continuar",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
                 OutlinedTextField(
                     value = notas,
                     onValueChange = { notas = it },
                     label = { Text("Notas / Síntomas") },
                     enabled = !soloLectura,
+                    isError = mostrarErroresDatos && notasVacias,
+                    supportingText = {
+                        if (mostrarErroresDatos && notasVacias) {
+                            Text("Campo obligatorio", color = MaterialTheme.colorScheme.error)
+                        }
+                    },
+                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -620,6 +660,13 @@ private fun OtDetailPanel(
                         }
                         if (mecanicosSeleccionados.isEmpty()) {
                             Text("Selecciona al menos un mecánico", style = MaterialTheme.typography.bodySmall)
+                            if (mostrarErroresDatos && sinMecanicos) {
+                                Text(
+                                    "Debes asignar mecánicos antes de guardar",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
                     }
                     if (mecanicos.isEmpty()) {
@@ -627,12 +674,10 @@ private fun OtDetailPanel(
                     }
                 }
                 Button(
-                    onClick = {
-                        onGuardarDatos(notas, mecanicosSeleccionados.toList(), patente)
-                    },
+                    onClick = guardarDatosValidados,
                     enabled = !soloLectura
                 ) {
-                    Text("Guardar datos generales")
+                    Text("Guardar OT")
                 }
                 mensajes.datos?.let { mensaje ->
                     Text(
@@ -657,7 +702,8 @@ private fun OtDetailPanel(
                     },
                     onToggleFormulario = { mostrarFormularioTareas = !mostrarFormularioTareas },
                     onAddTask = { nuevaTarea -> tareas += nuevaTarea },
-                    onRemoveTask = { tarea -> tareas.remove(tarea) }
+                    onRemoveTask = { tarea -> tareas.remove(tarea) },
+                    permiteEliminar = permiteEliminarTareas
                 )
                 Button(
                     onClick = {
@@ -871,22 +917,93 @@ private fun OtDetailPanel(
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 if (detalle.ot.estado == OtState.BORRADOR) {
-                    Button(onClick = { onGuardarDatos(notas, mecanicosSeleccionados, patente) }, enabled = !soloLectura) {
+                    OutlinedButton(onClick = { mostrarConfirmacionEliminar = true }, enabled = !soloLectura) {
+                        Icon(Icons.Default.Delete, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Eliminar borrador")
+                    }
+                    Button(onClick = guardarDatosValidados, enabled = !soloLectura) {
                         Text("Guardar borrador")
                     }
                 }
                 Button(onClick = onIniciar, enabled = puedeIniciar && !soloLectura) {
                     Text("Iniciar OT")
                 }
-                Button(onClick = onFinalizar, enabled = puedeFinalizar && !soloLectura) {
+                if (enEjecucion) {
+                    OutlinedButton(onClick = { mostrarConfirmacionCancelar = true }, enabled = !soloLectura) {
+                        Text("Cancelar OT")
+                    }
+                }
+                Button(
+                    onClick = {
+                        mostrarErroresDatos = true
+                        val tareasInvalidas = tareas.any { it.estado !in listOf(TareaEstado.TERMINADA, TareaEstado.CANCELADA) }
+                        if (patenteVacia || sinMecanicos || notasVacias) {
+                            mensajeValidacionEstado = "Faltan datos obligatorios para finalizar"
+                            return@Button
+                        }
+                        if (tareasInvalidas) {
+                            mensajeValidacionEstado = "Asegúrate de que todas las tareas estén terminadas o canceladas"
+                            return@Button
+                        }
+                        mensajeValidacionEstado = null
+                        onFinalizar()
+                    },
+                    enabled = puedeFinalizar && !soloLectura
+                ) {
                     Text("Finalizar OT")
                 }
+            }
+            mensajeValidacionEstado?.let { error ->
+                Text(error, color = MaterialTheme.colorScheme.error)
             }
             mensajes.estado?.let { mensaje ->
                 Text(
                     mensaje.text,
                     color = if (mensaje.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            if (mostrarConfirmacionEliminar) {
+                AlertDialog(
+                    onDismissRequest = { mostrarConfirmacionEliminar = false },
+                    title = { Text("Eliminar borrador") },
+                    text = { Text("Esto eliminará el borrador por completo y no se podrá recuperar.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            mostrarConfirmacionEliminar = false
+                            onEliminarBorrador()
+                        }) {
+                            Text("Eliminar")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { mostrarConfirmacionEliminar = false }) {
+                            Text("Cancelar")
+                        }
+                    }
+                )
+            }
+
+            if (mostrarConfirmacionCancelar) {
+                AlertDialog(
+                    onDismissRequest = { mostrarConfirmacionCancelar = false },
+                    title = { Text("Cancelar OT") },
+                    text = { Text("Esto dará por cancelada la OT y no se podrá modificar.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            mostrarConfirmacionCancelar = false
+                            onCancelar()
+                        }) {
+                            Text("Cancelar OT")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { mostrarConfirmacionCancelar = false }) {
+                            Text("Volver")
+                        }
+                    }
                 )
             }
         }
@@ -983,5 +1100,6 @@ private fun OtState.toReadableName(): String = when (this) {
     OtState.PEND_APROB -> "Pendiente de aprobación"
     OtState.EN_EJECUCION -> "En ejecución"
     OtState.FINALIZADA -> "Finalizada"
+    OtState.CANCELADA -> "Cancelada"
 }
 

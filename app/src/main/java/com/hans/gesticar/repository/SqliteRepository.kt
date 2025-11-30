@@ -732,7 +732,7 @@ class SqliteRepository(context: Context) : Repository {
             cursor.use {
                 if (!it.moveToFirst()) return false
                 val estadoActual = OtState.valueOf(it.getString(1))
-                if (estadoActual == OtState.EN_EJECUCION || estadoActual == OtState.FINALIZADA) {
+                if (estadoActual == OtState.EN_EJECUCION || estadoActual == OtState.FINALIZADA || estadoActual == OtState.CANCELADA) {
                     return false
                 }
             }
@@ -976,6 +976,10 @@ class SqliteRepository(context: Context) : Repository {
             val currentState = OtState.valueOf(current.getString(0))
             current.close()
 
+            if (currentState == OtState.FINALIZADA || currentState == OtState.CANCELADA) {
+                return false
+            }
+
             if (nuevo == OtState.EN_EJECUCION && !isPresupuestoAprobado(db, otId)) {
                 return false
             }
@@ -989,6 +993,41 @@ class SqliteRepository(context: Context) : Repository {
             val values = ContentValues().apply { put("estado", nuevo.name) }
             db.update("ots", values, "id = ?", arrayOf(otId))
             insertAudit(db, otId, "CAMBIAR_ESTADO:${nuevo.name}")
+            db.setTransactionSuccessful()
+            return true
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override suspend fun eliminarOt(otId: String): Boolean {
+        val db = helper.writableDatabase
+        db.beginTransaction()
+        try {
+            val current = db.rawQuery(
+                "SELECT estado FROM ots WHERE id = ?",
+                arrayOf(otId)
+            )
+            if (!current.moveToFirst()) {
+                current.close()
+                return false
+            }
+            val estadoActual = OtState.valueOf(current.getString(0))
+            current.close()
+            if (estadoActual != OtState.BORRADOR) {
+                return false
+            }
+
+            db.delete("presupuesto_items", "ot_id = ?", arrayOf(otId))
+            db.delete("ot_mecanicos", "ot_id = ?", arrayOf(otId))
+            db.delete("ot_tareas", "ot_id = ?", arrayOf(otId))
+            db.delete("ot_sintoma_fotos", "ot_id = ?", arrayOf(otId))
+            db.delete("ot_sintomas", "ot_id = ?", arrayOf(otId))
+            db.delete("ot_logs", "ot_id = ?", arrayOf(otId))
+            val removed = db.delete("ots", "id = ?", arrayOf(otId))
+            if (removed == 0) {
+                return false
+            }
             db.setTransactionSuccessful()
             return true
         } finally {
