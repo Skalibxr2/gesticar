@@ -13,6 +13,7 @@ import com.hans.gesticar.model.TareaOt
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
 import com.hans.gesticar.repository.Repository
+import com.hans.gesticar.util.normalizeRut
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -554,6 +555,49 @@ class MainViewModel(
             _ui.update {
                 it.copy(
                     resultadosBusqueda = lista,
+                    mensaje = mensaje,
+                    detalleSeleccionado = null,
+                    cargandoDetalle = false,
+                    vehiculosCliente = emptyList(),
+                    detalleMensajes = DetalleMensajes()
+                )
+            }
+        }
+    }
+
+    fun buscarPorFiltros(numero: Int?, patente: String?, rut: String?, estado: OtState?) {
+        val usuario = _ui.value.usuarioActual
+        if (usuario == null) {
+            _ui.update {
+                it.copy(
+                    resultadosBusqueda = emptyList(),
+                    mensaje = "Debes iniciar sesión para buscar órdenes.",
+                    detalleSeleccionado = null,
+                    cargandoDetalle = false,
+                    vehiculosCliente = emptyList(),
+                    detalleMensajes = DetalleMensajes()
+                )
+            }
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val rutNormalizado = rut?.let { normalizeRut(it) }
+            val patenteNormalizada = patente?.uppercase()
+            val idsPorRut = rutNormalizado?.let { rutInput ->
+                repo.buscarOtPorRut(rutInput).map { it.id }.toSet()
+            }
+            val resultados = repo.obtenerOts()
+                .filter { numero == null || it.numero == numero }
+                .filter { patenteNormalizada == null || it.vehiculoPatente.equals(patenteNormalizada, ignoreCase = true) }
+                .filter { idsPorRut == null || it.id in idsPorRut }
+                .filter { estado == null || it.estado == estado }
+                .filtrarPara(usuario)
+
+            val mensaje = if (resultados.isEmpty()) "Sin resultados" else null
+            _ui.update {
+                it.copy(
+                    resultadosBusqueda = resultados,
                     mensaje = mensaje,
                     detalleSeleccionado = null,
                     cargandoDetalle = false,
