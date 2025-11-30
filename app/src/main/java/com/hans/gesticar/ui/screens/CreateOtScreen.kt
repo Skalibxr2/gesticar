@@ -699,6 +699,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
         TasksSection(
             tasks = tareas,
             soloLectura = false,
+            permiteCambiarEstado = false,
             title = "Tareas preventivas o correctivas",
             modifier = Modifier.fillMaxWidth(),
             expandido = tareasExpandido,

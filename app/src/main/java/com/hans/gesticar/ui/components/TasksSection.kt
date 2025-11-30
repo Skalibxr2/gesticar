@@ -1,5 +1,6 @@
 package com.hans.gesticar.ui.components
 
+import android.app.DatePickerDialog
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -7,40 +8,92 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberSaveable
-import androidx.compose.runtime.snapshots.SnapshotStateList
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.hans.gesticar.model.TareaEstado
+import java.util.Calendar
+
+@Composable
+private fun DatePickerField(
+    label: String,
+    value: String,
+    minDate: Long?,
+    onDateSelected: (String) -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    placeholder: String = "dd/MM/aaaa"
+) {
+    val context = LocalContext.current
+    val pickerEnabled = enabled
+
+    fun showPicker() {
+        val initialDate = parseTaskDate(value) ?: minDate ?: System.currentTimeMillis()
+        val calendar = Calendar.getInstance().apply { timeInMillis = initialDate }
+        DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                val selected = String.format("%02d/%02d/%04d", dayOfMonth, month + 1, year)
+                onDateSelected(selected)
+            },
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH),
+            calendar.get(Calendar.DAY_OF_MONTH)
+        ).apply {
+            minDate?.let { datePicker.minDate = it }
+        }.show()
+    }
+
+    OutlinedTextField(
+        value = value,
+        onValueChange = {},
+        label = { Text(label) },
+        placeholder = { Text(placeholder) },
+        readOnly = true,
+        enabled = true,
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(enabled = pickerEnabled) { showPicker() },
+        trailingIcon = {
+            IconButton(onClick = { showPicker() }, enabled = pickerEnabled) {
+                Icon(Icons.Default.CalendarToday, contentDescription = "Seleccionar fecha")
+            }
+        },
+        colors = TextFieldDefaults.outlinedTextFieldColors()
+    )
+}
 
 @Composable
 fun TasksSection(
     tasks: SnapshotStateList<EditableTaskState>,
     soloLectura: Boolean,
+    permiteCambiarEstado: Boolean,
     modifier: Modifier = Modifier,
     title: String = "Tareas",
     expandido: Boolean,
@@ -128,38 +181,39 @@ fun TasksSection(
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 OutlinedTextField(
                                     value = nuevaFechaCreacion,
-                                    onValueChange = { nuevaFechaCreacion = it },
+                                    onValueChange = {},
                                     label = { Text("Fecha de creación") },
                                     placeholder = { Text("dd/MM/aaaa") },
                                     modifier = Modifier.weight(1f),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    supportingText = { Text("Usa formato dd/MM/aaaa") }
+                                    readOnly = true,
+                                    colors = TextFieldDefaults.outlinedTextFieldColors()
                                 )
-                                OutlinedTextField(
+                                DatePickerField(
+                                    label = "Fecha de inicio",
                                     value = nuevaFechaInicio,
-                                    onValueChange = { nuevaFechaInicio = it },
-                                    label = { Text("Fecha de inicio") },
-                                    placeholder = { Text("dd/MM/aaaa") },
-                                    modifier = Modifier.weight(1f),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                    minDate = parseTaskDate(nuevaFechaCreacion),
+                                    onDateSelected = { nuevaFechaInicio = it },
+                                    enabled = !soloLectura,
+                                    modifier = Modifier.weight(1f)
                                 )
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                OutlinedTextField(
+                                DatePickerField(
+                                    label = "Fecha de término",
                                     value = nuevaFechaTermino,
-                                    onValueChange = { nuevaFechaTermino = it },
-                                    label = { Text("Fecha de término") },
-                                    placeholder = { Text("dd/MM/aaaa") },
-                                    modifier = Modifier.weight(1f),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                    minDate = parseTaskDate(nuevaFechaInicio) ?: parseTaskDate(nuevaFechaCreacion),
+                                    onDateSelected = { nuevaFechaTermino = it },
+                                    enabled = !soloLectura,
+                                    modifier = Modifier.weight(1f)
                                 )
                                 DropdownTextField(
                                     value = nuevoEstado.toReadableName(),
                                     label = "Estado",
                                     expanded = nuevoEstadoMenu,
-                                    onExpandedChange = { nuevoEstadoMenu = it },
+                                    onExpandedChange = { if (permiteCambiarEstado) nuevoEstadoMenu = it },
                                     onDismissRequest = { nuevoEstadoMenu = false },
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f),
+                                    enabled = permiteCambiarEstado
                                 ) { closeMenu ->
                                     TareaEstado.values().forEach { estado ->
                                         DropdownMenuItem(
@@ -209,6 +263,7 @@ fun TasksSection(
                         TaskItemCard(
                             tarea = tarea,
                             soloLectura = soloLectura,
+                            permiteCambiarEstado = permiteCambiarEstado,
                             onExpand = {
                                 val debeExpandir = !tarea.expandido
                                 tasks.forEach { it.expandido = it.id == tarea.id && debeExpandir }
@@ -230,6 +285,7 @@ fun TasksSection(
 private fun TaskItemCard(
     tarea: EditableTaskState,
     soloLectura: Boolean,
+    permiteCambiarEstado: Boolean,
     onExpand: () -> Unit,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier
@@ -267,11 +323,12 @@ private fun TaskItemCard(
             }
 
             if (tarea.expandido) {
+                val fechaCreacionMillis = parseTaskDate(tarea.fechaCreacion) ?: System.currentTimeMillis()
                 OutlinedTextField(
                     value = tarea.descripcion,
                     onValueChange = { tarea.descripcion = it },
                     label = { Text("Descripción de la tarea") },
-                    enabled = !soloLectura,
+                    readOnly = soloLectura,
                     modifier = Modifier.fillMaxWidth(),
                     supportingText = { Text("Requerido") }
                 )
@@ -279,54 +336,52 @@ private fun TaskItemCard(
                     value = tarea.detalle,
                     onValueChange = { tarea.detalle = it },
                     label = { Text("Notas o detalle") },
-                    enabled = !soloLectura,
+                    readOnly = soloLectura,
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = tarea.fechaCreacion,
-                        onValueChange = { tarea.fechaCreacion = it },
-                        label = { Text("Fecha de creación") },
-                        placeholder = { Text("dd/MM/aaaa") },
-                        enabled = !soloLectura,
-                        modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        supportingText = { Text("Usa formato dd/MM/aaaa") }
-                    )
-                    OutlinedTextField(
-                        value = tarea.fechaInicio,
-                        onValueChange = { tarea.fechaInicio = it },
-                        label = { Text("Fecha de inicio") },
-                        placeholder = { Text("dd/MM/aaaa") },
-                        enabled = !soloLectura,
-                        modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = tarea.fechaTermino,
-                        onValueChange = { tarea.fechaTermino = it },
-                        label = { Text("Fecha de término") },
-                        placeholder = { Text("dd/MM/aaaa") },
-                        enabled = !soloLectura,
-                        modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
-                    DropdownTextField(
-                        value = tarea.estado.toReadableName(),
-                        label = "Estado",
-                        expanded = tarea.estadoMenuExpanded,
-                        onExpandedChange = { tarea.estadoMenuExpanded = it },
-                        onDismissRequest = { tarea.estadoMenuExpanded = false },
-                        modifier = Modifier.weight(1f),
-                        enabled = !soloLectura
-                    ) { closeMenu ->
-                        TareaEstado.values().forEach { estado ->
-                            DropdownMenuItem(
-                                text = { Text(estado.toReadableName()) },
-                                onClick = {
+                OutlinedTextField(
+                    value = tarea.fechaCreacion,
+                    onValueChange = {},
+                    label = { Text("Fecha de creación") },
+                    placeholder = { Text("dd/MM/aaaa") },
+                    readOnly = true,
+                    modifier = Modifier.weight(1f),
+                    colors = TextFieldDefaults.outlinedTextFieldColors()
+                )
+                DatePickerField(
+                    label = "Fecha de inicio",
+                    value = tarea.fechaInicio,
+                    minDate = fechaCreacionMillis,
+                    onDateSelected = { tarea.fechaInicio = it },
+                    enabled = !soloLectura,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                val fechaInicioMillis = parseTaskDate(tarea.fechaInicio) ?: fechaCreacionMillis
+                DatePickerField(
+                    label = "Fecha de término",
+                    value = tarea.fechaTermino,
+                    minDate = fechaInicioMillis,
+                    onDateSelected = { tarea.fechaTermino = it },
+                    enabled = !soloLectura,
+                    modifier = Modifier.weight(1f)
+                )
+                DropdownTextField(
+                    value = tarea.estado.toReadableName(),
+                    label = "Estado",
+                    expanded = tarea.estadoMenuExpanded,
+                    onExpandedChange = { if (permiteCambiarEstado && !soloLectura) tarea.estadoMenuExpanded = it },
+                    onDismissRequest = { tarea.estadoMenuExpanded = false },
+                    modifier = Modifier.weight(1f),
+                    enabled = permiteCambiarEstado && !soloLectura
+                ) { closeMenu ->
+                    TareaEstado.values().forEach { estado ->
+                        DropdownMenuItem(
+                            text = { Text(estado.toReadableName()) },
+                            onClick = {
                                     tarea.estado = estado
                                     tarea.estadoMenuExpanded = false
                                     closeMenu()
