@@ -172,6 +172,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
     var patenteBusqueda by rememberSaveable { mutableStateOf("") }
     var mostrarConfirmarCancelarRegistro by rememberSaveable { mutableStateOf(false) }
     var vehiculoInfoDialog by remember { mutableStateOf<Vehiculo?>(null) }
+    var vehiculoADesvincular by remember { mutableStateOf<Vehiculo?>(null) }
     var vehiculoOperacionPendiente by remember { mutableStateOf(false) }
 
     var presupuestoAprobado by rememberSaveable { mutableStateOf(false) }
@@ -210,6 +211,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             flujoNuevoVehiculo = false
             patenteBusqueda = ""
             vehiculoInfoDialog = null
+            vehiculoADesvincular = null
             seleccionMecanicos.clear()
             vehiculoSeleccionado = null
             items.clear()
@@ -536,7 +538,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
                 if (rutNormalizado == null) {
                     vm.reportarMensajeVehiculo("Primero selecciona o registra un cliente")
                 } else {
-                    vm.desasociarVehiculoDeCliente(vehiculo.patente, rutNormalizado)
+                    vehiculoADesvincular = vehiculo
                 }
             },
             onRegistrarNuevoVehiculo = {
@@ -761,6 +763,30 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
                     vehiculo.combustible?.let { Text("Combustible: $it") }
                 }
             }
+        )
+    }
+    vehiculoADesvincular?.let { vehiculo ->
+        AlertDialog(
+            onDismissRequest = { vehiculoADesvincular = null },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        rutNormalizado?.let { rut ->
+                            vm.desasociarVehiculoDeCliente(vehiculo.patente, rut)
+                        }
+                        vehiculoADesvincular = null
+                    }
+                ) {
+                    Text("Sí, desvincular")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { vehiculoADesvincular = null }) {
+                    Text("Cancelar")
+                }
+            },
+            title = { Text("¿Desvincular vehículo?") },
+            text = { Text("¿Deseas eliminar o desvincular el vehículo ${vehiculo.patente} del cliente?") }
         )
     }
 }
