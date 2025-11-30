@@ -98,25 +98,25 @@ class MainViewModel(
     ) {
         val detalle = repo.obtenerDetalleOt(otId)
         val mecanicos = repo.obtenerMecanicos()
-        val ots = repo.obtenerOts()
-        val resultadosActualizados = if (detalle != null) {
-            _ui.value.resultadosBusqueda.map { resultado ->
-                if (resultado.ot.id == detalle.ot.id) {
-                    resultado.copy(
-                        ot = detalle.ot,
-                        clienteNombre = detalle.cliente?.nombre,
-                        patente = detalle.vehiculo?.patente ?: detalle.ot.vehiculoPatente,
-                        estado = detalle.ot.estado
-                    )
-                } else {
-                    resultado
+            val ots = repo.obtenerOts()
+            val resultadosActualizados = if (detalle != null) {
+                _ui.value.resultadosBusqueda.map { resultado ->
+                    if (resultado.ot.id == detalle.ot.id) {
+                        resultado.copy(
+                            ot = detalle.ot,
+                            clienteNombre = detalle.cliente?.nombre,
+                            patente = detalle.vehiculo?.patente ?: detalle.ot.vehiculoPatente,
+                            estado = detalle.ot.estado
+                        )
+                    } else {
+                        resultado
+                    }
                 }
+            } else {
+                _ui.value.resultadosBusqueda
             }
-        } else {
-            _ui.value.resultadosBusqueda
-        }
-        val rutCliente = detalle?.cliente?.rut ?: detalle?.vehiculo?.clienteRut
-        val vehiculos = rutCliente?.let { repo.obtenerVehiculosPorRut(it) } ?: emptyList()
+            val rutCliente = detalle?.cliente?.rut ?: detalle?.vehiculo?.clienteRut
+            val vehiculos = rutCliente?.let { repo.obtenerVehiculosPorRut(it) } ?: emptyList()
         _ui.update {
             it.copy(
                 detalleSeleccionado = detalle,
@@ -814,9 +814,14 @@ class MainViewModel(
                 actualizarDetalle(otId, DetalleMensajes(presupuesto = SectionMessage("Presupuesto aprobado")))
             } else {
                 val currentResults = _ui.value.resultadosBusqueda
-                val updatedOt = currentResults.firstOrNull { it.id == otId }?.numero?.let { repo.buscarOtPorNumero(it) }
+                val updatedOt = currentResults
+                    .firstOrNull { it.ot.id == otId }
+                    ?.ot
+                    ?.numero
+                    ?.let { numero -> repo.buscarOtPorNumero(numero) }
                 val refreshedResults = if (updatedOt != null) {
-                    currentResults.map { if (it.id == otId) updatedOt else it }
+                    val resultadoActualizado = construirResultado(updatedOt)
+                    currentResults.map { if (it.ot.id == otId) resultadoActualizado else it }
                 } else {
                     currentResults
                 }
@@ -837,12 +842,17 @@ class MainViewModel(
             val ok = repo.cambiarEstado(otId, nuevo)
             val currentResults = _ui.value.resultadosBusqueda
             val refreshedOt = if (ok) {
-                currentResults.firstOrNull { it.id == otId }?.numero?.let { repo.buscarOtPorNumero(it) }
+                currentResults
+                    .firstOrNull { it.ot.id == otId }
+                    ?.ot
+                    ?.numero
+                    ?.let { numero -> repo.buscarOtPorNumero(numero) }
             } else {
                 null
             }
             val resultados = if (refreshedOt != null) {
-                currentResults.map { if (it.id == otId) refreshedOt else it }
+                val resultadoActualizado = construirResultado(refreshedOt)
+                currentResults.map { if (it.ot.id == otId) resultadoActualizado else it }
             } else {
                 currentResults
             }
