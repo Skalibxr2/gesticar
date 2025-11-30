@@ -187,6 +187,8 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
     var vehiculoOperacionPendiente by remember { mutableStateOf(false) }
 
     var presupuestoAprobado by rememberSaveable { mutableStateOf(false) }
+    var presupuestoExpandido by rememberSaveable { mutableStateOf(false) }
+    var mostrarFormularioPresupuesto by rememberSaveable { mutableStateOf(false) }
     val items = remember { mutableStateListOf<PresupuestoItemForm>() }
     val seleccionMecanicos = remember { mutableStateListOf<String>() }
     var vehiculoSeleccionado by rememberSaveable { mutableStateOf<String?>(null) }
@@ -671,6 +673,15 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
         PresupuestoSection(
             items = items,
             presupuestoAprobado = presupuestoAprobado,
+            expandido = presupuestoExpandido,
+            mostrarFormulario = mostrarFormularioPresupuesto,
+            onToggleExpandido = {
+                presupuestoExpandido = !presupuestoExpandido
+                if (!presupuestoExpandido) {
+                    mostrarFormularioPresupuesto = false
+                }
+            },
+            onToggleFormulario = { mostrarFormularioPresupuesto = !mostrarFormularioPresupuesto },
             onToggleAprobado = { presupuestoAprobado = !presupuestoAprobado }
         )
 
@@ -1581,108 +1592,182 @@ private fun MecanicosSection(
 private fun PresupuestoSection(
     items: MutableList<PresupuestoItemForm>,
     presupuestoAprobado: Boolean,
+    expandido: Boolean,
+    mostrarFormulario: Boolean,
+    onToggleExpandido: () -> Unit,
+    onToggleFormulario: () -> Unit,
     onToggleAprobado: () -> Unit
 ) {
     var nuevoItem by remember { mutableStateOf(PresupuestoItemForm()) }
+    var mostrarErroresNuevoItem by remember { mutableStateOf(false) }
+
+    LaunchedEffect(mostrarFormulario) {
+        if (!mostrarFormulario) {
+            mostrarErroresNuevoItem = false
+        }
+    }
 
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Presupuesto", style = MaterialTheme.typography.titleMedium)
-
-            Text("Ítems del presupuesto", style = MaterialTheme.typography.titleSmall)
-            if (items.isEmpty()) {
-                Text("Aún no hay ítems agregados")
-            }
-            items.forEachIndexed { _, item ->
-                PresupuestoItemRow(
-                    item = item,
-                    onExpand = {
-                        val debeExpandir = !item.expandido
-                        items.forEach { it.expandido = false }
-                        item.expandido = debeExpandir
-                    },
-                    onRemove = {
-                        val eliminandoExpandido = item.expandido
-                        items.remove(item)
-                        if (eliminandoExpandido && items.isNotEmpty()) {
-                            items.first().expandido = true
-                        }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggleExpandido() }
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Presupuesto", style = MaterialTheme.typography.titleMedium)
+                    if (!expandido) {
+                        Text(
+                            "Toca para ver y editar los ítems",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
+                }
+                Icon(
+                    imageVector = if (expandido) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expandido) "Contraer presupuesto" else "Expandir presupuesto"
                 )
             }
 
-            Divider()
+            if (expandido) {
+                Text(
+                    "Los precios/día incluyen IVA",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Agregar ítem", style = MaterialTheme.typography.titleSmall)
-                Text("Tipo de ítem del presupuesto", style = MaterialTheme.typography.bodySmall)
-                AssistChip(
-                    onClick = {
-                        nuevoItem = nuevoItem.copy(tipo = if (nuevoItem.tipo == ItemTipo.MO) ItemTipo.REP else ItemTipo.MO)
-                    },
-                    label = { Text(if (nuevoItem.tipo == ItemTipo.MO) "Mano de obra" else "Repuestos") },
-                    colors = AssistChipDefaults.assistChipColors()
-                )
-                OutlinedTextField(
-                    value = nuevoItem.titulo,
-                    onValueChange = { nuevoItem = nuevoItem.copy(titulo = it) },
-                    label = { Text("Título del ítem") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = nuevoItem.descripcion,
-                    onValueChange = { nuevoItem = nuevoItem.copy(descripcion = it) },
-                    label = { Text("Descripción") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = nuevoItem.cantidad,
-                        onValueChange = { nuevoItem = nuevoItem.copy(cantidad = it.filter(Char::isDigit)) },
-                        label = { Text("Cantidad (días)") },
-                        modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
-                    OutlinedTextField(
-                        value = nuevoItem.precioUnitario,
-                        onValueChange = { nuevoItem = nuevoItem.copy(precioUnitario = it.filter(Char::isDigit)) },
-                        label = { Text("Precio/día") },
-                        modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
+                OutlinedButton(onClick = onToggleFormulario) {
+                    Text(if (mostrarFormulario) "Ocultar formulario" else "Agregar nuevo ítem")
                 }
-                Button(
-                    onClick = {
+
+                if (mostrarFormulario) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Agregar ítem", style = MaterialTheme.typography.titleSmall)
+                        Text("Tipo de ítem del presupuesto", style = MaterialTheme.typography.bodySmall)
+                        AssistChip(
+                            onClick = {
+                                nuevoItem = nuevoItem.copy(tipo = if (nuevoItem.tipo == ItemTipo.MO) ItemTipo.REP else ItemTipo.MO)
+                            },
+                            label = { Text(if (nuevoItem.tipo == ItemTipo.MO) "Mano de obra" else "Repuestos") },
+                            colors = AssistChipDefaults.assistChipColors()
+                        )
+                        val tituloInvalido = nuevoItem.titulo.isBlank()
+                        OutlinedTextField(
+                            value = nuevoItem.titulo,
+                            onValueChange = { nuevoItem = nuevoItem.copy(titulo = it) },
+                            label = { Text("Título del ítem") },
+                            isError = mostrarErroresNuevoItem && tituloInvalido,
+                            supportingText = {
+                                if (mostrarErroresNuevoItem && tituloInvalido) {
+                                    Text("Campo obligatorio", color = MaterialTheme.colorScheme.error)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = nuevoItem.descripcion,
+                            onValueChange = { nuevoItem = nuevoItem.copy(descripcion = it) },
+                            label = { Text("Descripción") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
                         val cantidad = nuevoItem.cantidad.toIntOrNull()
                         val precio = nuevoItem.precioUnitario.toIntOrNull()
-                        if (nuevoItem.titulo.isNotBlank() && cantidad != null && precio != null) {
-                            items.forEach { it.expandido = false }
-                            items += nuevoItem.copy(expandido = true)
-                            nuevoItem = PresupuestoItemForm()
+                        val cantidadInvalida = cantidad == null
+                        val precioInvalido = precio == null
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = nuevoItem.cantidad,
+                                onValueChange = { nuevoItem = nuevoItem.copy(cantidad = it.filter(Char::isDigit)) },
+                                label = { Text("Cantidad (días)") },
+                                isError = mostrarErroresNuevoItem && cantidadInvalida,
+                                supportingText = {
+                                    if (mostrarErroresNuevoItem && cantidadInvalida) {
+                                        Text("Campo obligatorio", color = MaterialTheme.colorScheme.error)
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            )
+                            OutlinedTextField(
+                                value = nuevoItem.precioUnitario,
+                                onValueChange = { nuevoItem = nuevoItem.copy(precioUnitario = it.filter(Char::isDigit)) },
+                                label = { Text("Precio/día (con IVA)") },
+                                isError = mostrarErroresNuevoItem && precioInvalido,
+                                supportingText = {
+                                    if (mostrarErroresNuevoItem && precioInvalido) {
+                                        Text("Campo obligatorio", color = MaterialTheme.colorScheme.error)
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            )
+                        }
+                        Button(
+                            onClick = {
+                                val cantidadValida = cantidad != null
+                                val precioValido = precio != null
+                                val tituloValido = nuevoItem.titulo.isNotBlank()
+                                if (tituloValido && cantidadValida && precioValido) {
+                                    mostrarErroresNuevoItem = false
+                                    items.forEach { it.expandido = false }
+                                    items += nuevoItem.copy(expandido = false)
+                                    nuevoItem = PresupuestoItemForm()
+                                } else {
+                                    mostrarErroresNuevoItem = true
+                                }
+                            }
+                        ) {
+                            Text("Agregar ítem")
                         }
                     }
-                ) {
-                    Text("Agregar ítem")
                 }
-            }
 
-            val subtotal = items.sumOf { form ->
-                val cantidad = form.cantidad.toIntOrNull() ?: 0
-                val precio = form.precioUnitario.toIntOrNull() ?: 0
-                cantidad * precio
-            }
-            val iva = (subtotal * 19) / 100
-            val total = subtotal + iva
-            Text("Subtotal: ${formatCurrency(subtotal)}")
-            Text("IVA (19%): ${formatCurrency(iva)}")
-            Text("Total: ${formatCurrency(total)}")
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Switch(
-                    checked = presupuestoAprobado,
-                    onCheckedChange = { onToggleAprobado() },
-                    colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary)
-                )
-                Text(if (presupuestoAprobado) "Presupuesto aprobado" else "Presupuesto pendiente")
+                Divider()
+
+                Text("Ítems del presupuesto", style = MaterialTheme.typography.titleSmall)
+                if (items.isEmpty()) {
+                    Text("Aún no hay ítems agregados")
+                }
+                items.forEachIndexed { _, item ->
+                    PresupuestoItemRow(
+                        item = item,
+                        onExpand = {
+                            val debeExpandir = !item.expandido
+                            items.forEach { it.expandido = false }
+                            item.expandido = debeExpandir
+                        },
+                        onRemove = {
+                            val eliminandoExpandido = item.expandido
+                            items.remove(item)
+                            if (eliminandoExpandido && items.isNotEmpty()) {
+                                items.first().expandido = true
+                            }
+                        }
+                    )
+                }
+
+                Divider()
+
+                val totalConIva = items.sumOf { form ->
+                    val cantidadTotal = form.cantidad.toIntOrNull() ?: 0
+                    val precioUnitario = form.precioUnitario.toIntOrNull() ?: 0
+                    cantidadTotal * precioUnitario
+                }
+                val subtotalSinIva = (totalConIva * 100) / 119
+                val iva = totalConIva - subtotalSinIva
+                Text("Subtotal (sin IVA): ${formatCurrency(subtotalSinIva)}")
+                Text("IVA (19%): ${formatCurrency(iva)}")
+                Text("Total (con IVA): ${formatCurrency(totalConIva)}")
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Switch(
+                        checked = presupuestoAprobado,
+                        onCheckedChange = { onToggleAprobado() },
+                        colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary)
+                    )
+                    Text(if (presupuestoAprobado) "Presupuesto aprobado" else "Presupuesto pendiente")
+                }
             }
         }
     }
@@ -1760,14 +1845,14 @@ private fun PresupuestoItemRow(
                     OutlinedTextField(
                         value = item.precioUnitario,
                         onValueChange = { item.precioUnitario = it.filter { ch -> ch.isDigit() } },
-                        label = { Text("Precio/día") },
+                        label = { Text("Precio/día (con IVA)") },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
                 }
                 val cantidad = item.cantidad.toIntOrNull() ?: 0
                 val precio = item.precioUnitario.toIntOrNull() ?: 0
-                Text("Subtotal: ${formatCurrency(cantidad * precio)}")
+                Text("Subtotal (con IVA): ${formatCurrency(cantidad * precio)}")
             }
         }
     }
