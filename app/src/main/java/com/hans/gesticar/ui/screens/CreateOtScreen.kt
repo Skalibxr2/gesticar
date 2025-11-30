@@ -181,6 +181,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
     var vehiculoSeleccionado by rememberSaveable { mutableStateOf<String?>(null) }
     val sintomas = remember { mutableStateListOf(SymptomForm()) }
     val tareas = remember { mutableStateListOf(EditableTaskState()) }
+    var mostrarCancelarCreacionCliente by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(uiState.exito) {
         if (uiState.exito) {
@@ -383,6 +384,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             camposHabilitados = camposClienteEditables,
             clienteEncontrado = clienteEncontrado,
             creandoCliente = creandoCliente,
+            onCancelarCreacion = { mostrarCancelarCreacionCliente = true },
             onModificarCliente = {
                 modoEdicionCliente = true
                 detallesClienteExpandido = true
@@ -409,6 +411,32 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             guardandoCliente = uiState.guardandoCliente,
             mensajeCliente = uiState.mensajeCliente
         )
+
+        if (mostrarCancelarCreacionCliente) {
+            AlertDialog(
+                onDismissRequest = { mostrarCancelarCreacionCliente = false },
+                title = { Text("Cancelar creación de cliente") },
+                text = { Text("Se perderán los datos ingresados. ¿Deseas continuar?") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            rutSanitized = ""
+                            creandoCliente = false
+                            modoEdicionCliente = false
+                            detallesClienteExpandido = false
+                            mostrarCancelarCreacionCliente = false
+                        }
+                    ) {
+                        Text("Sí")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { mostrarCancelarCreacionCliente = false }) {
+                        Text("No")
+                    }
+                }
+            )
+        }
 
         VehiculoSection(
             rutCliente = rutNormalizado,
@@ -812,6 +840,7 @@ private fun ClienteSection(
     camposHabilitados: Boolean,
     clienteEncontrado: Boolean,
     creandoCliente: Boolean,
+    onCancelarCreacion: () -> Unit,
     onModificarCliente: () -> Unit,
     onIniciarCreacion: () -> Unit,
     onGuardarCliente: () -> Unit,
@@ -862,22 +891,30 @@ private fun ClienteSection(
                     Text(if (detallesExpandido) "Ocultar detalles" else "Ver más detalles")
                 }
 
-                when {
-                    clienteEncontrado && !camposHabilitados -> {
-                        Button(onClick = onModificarCliente, enabled = !guardandoCliente) {
-                            Text("Modificar cliente")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (creandoCliente) {
+                        TextButton(onClick = onCancelarCreacion, enabled = !guardandoCliente) {
+                            Text("Cancelar")
                         }
                     }
 
-                    !clienteEncontrado && !creandoCliente -> {
-                        Button(onClick = onIniciarCreacion, enabled = rutValido && !guardandoCliente) {
-                            Text("Crear cliente")
+                    when {
+                        clienteEncontrado && !camposHabilitados -> {
+                            Button(onClick = onModificarCliente, enabled = !guardandoCliente) {
+                                Text("Modificar cliente")
+                            }
                         }
-                    }
 
-                    camposHabilitados -> {
-                        Button(onClick = onGuardarCliente, enabled = puedeGuardar) {
-                            Text(textoAccion)
+                        !clienteEncontrado && !creandoCliente -> {
+                            Button(onClick = onIniciarCreacion, enabled = rutValido && !guardandoCliente) {
+                                Text("Crear cliente")
+                            }
+                        }
+
+                        camposHabilitados -> {
+                            Button(onClick = onGuardarCliente, enabled = puedeGuardar) {
+                                Text(textoAccion)
+                            }
                         }
                     }
                 }
