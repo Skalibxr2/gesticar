@@ -28,6 +28,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -60,6 +62,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -121,11 +124,13 @@ private fun PresupuestoItemForm.copy(
 private class SymptomForm(
     descripcion: String = "",
     fechaTexto: String = "",
-    fotos: List<Uri> = emptyList()
+    fotos: List<Uri> = emptyList(),
+    expandido: Boolean = false
 ) {
     var descripcion by mutableStateOf(descripcion)
     var fechaTexto by mutableStateOf(fechaTexto)
     val fotos = mutableStateListOf<Uri>().apply { addAll(fotos) }
+    var expandido by mutableStateOf(expandido)
 }
 
 private val symptomFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
@@ -179,7 +184,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
     val items = remember { mutableStateListOf<PresupuestoItemForm>() }
     val seleccionMecanicos = remember { mutableStateListOf<String>() }
     var vehiculoSeleccionado by rememberSaveable { mutableStateOf<String?>(null) }
-    val sintomas = remember { mutableStateListOf(SymptomForm()) }
+    val sintomas = remember { mutableStateListOf(SymptomForm(expandido = true)) }
     val tareas = remember { mutableStateListOf(EditableTaskState()) }
     var mostrarCancelarCreacionCliente by rememberSaveable { mutableStateOf(false) }
 
@@ -217,7 +222,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             vehiculoSeleccionado = null
             items.clear()
             sintomas.clear()
-            sintomas += SymptomForm()
+            sintomas += SymptomForm(expandido = true)
             tareas.clear()
             tareas += EditableTaskState()
         }
@@ -619,8 +624,25 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
 
         SymptomsSection(
             sintomas = sintomas,
-            onAgregarSintoma = { sintomas += SymptomForm() },
-            onEliminarSintoma = { index -> if (sintomas.size > 1) sintomas.removeAt(index) }
+            onExpandSintoma = { seleccionado ->
+                val debeExpandir = sintomas.getOrNull(seleccionado)?.expandido != true
+                sintomas.forEachIndexed { index, sintoma ->
+                    sintoma.expandido = debeExpandir && index == seleccionado
+                }
+            },
+            onAgregarSintoma = {
+                sintomas.forEach { it.expandido = false }
+                sintomas += SymptomForm(expandido = true)
+            },
+            onEliminarSintoma = { index ->
+                if (sintomas.size > 1) {
+                    val eliminandoExpandido = sintomas.getOrNull(index)?.expandido == true
+                    sintomas.removeAt(index)
+                    if (eliminandoExpandido || sintomas.none { it.expandido }) {
+                        sintomas.firstOrNull()?.expandido = true
+                    }
+                }
+            }
         )
 
         MecanicosSection(
@@ -968,6 +990,7 @@ private fun ClienteSection(
 @Composable
 private fun SymptomsSection(
     sintomas: List<SymptomForm>,
+    onExpandSintoma: (Int) -> Unit,
     onAgregarSintoma: () -> Unit,
     onEliminarSintoma: (Int) -> Unit
 ) {
@@ -982,6 +1005,8 @@ private fun SymptomsSection(
                 SymptomCard(
                     indice = index + 1,
                     sintoma = sintoma,
+                    expandido = sintoma.expandido,
+                    onExpand = { onExpandSintoma(index) },
                     onRemove = if (sintomas.size > 1) {
                         { onEliminarSintoma(index) }
                     } else {
@@ -1002,7 +1027,13 @@ private fun SymptomsSection(
 }
 
 @Composable
-private fun SymptomCard(indice: Int, sintoma: SymptomForm, onRemove: (() -> Unit)?) {
+private fun SymptomCard(
+    indice: Int,
+    sintoma: SymptomForm,
+    expandido: Boolean,
+    onExpand: () -> Unit,
+    onRemove: (() -> Unit)?
+) {
     val pickGallery = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
         uris.forEach { uri ->
             if (uri !in sintoma.fotos) {
@@ -1011,52 +1042,77 @@ private fun SymptomCard(indice: Int, sintoma: SymptomForm, onRemove: (() -> Unit
         }
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Síntoma #$indice", style = MaterialTheme.typography.labelLarge)
-            Spacer(modifier = Modifier.weight(1f))
-            if (onRemove != null) {
-                IconButton(onClick = onRemove) {
-                    Icon(Icons.Default.Delete, contentDescription = "Eliminar síntoma")
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onExpand() }
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Síntoma #$indice", style = MaterialTheme.typography.labelLarge)
+                        Icon(
+                            imageVector = if (expandido) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (expandido) "Contraer síntoma" else "Expandir síntoma"
+                        )
+                    }
+                    Text(
+                        text = sintoma.descripcion.ifBlank { "Sin descripción" },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                if (onRemove != null) {
+                    IconButton(onClick = onRemove) {
+                        Icon(Icons.Default.Delete, contentDescription = "Eliminar síntoma")
+                    }
                 }
             }
-        }
-        OutlinedTextField(
-            value = sintoma.descripcion,
-            onValueChange = { sintoma.descripcion = it },
-            label = { Text("Descripción del síntoma") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = sintoma.fechaTexto,
-            onValueChange = { sintoma.fechaTexto = it },
-            label = { Text("Fecha u hora (opcional)") },
-            supportingText = { Text("Formato sugerido: 2024-05-01 09:30") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(onClick = {
-                pickGallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-            }) {
-                Icon(imageVector = Icons.Default.Collections, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Galería")
-            }
-        }
-        if (sintoma.fotos.isNotEmpty()) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(sintoma.fotos) { uri ->
-                    Box {
-                        AsyncImage(
-                            model = uri,
-                            contentDescription = "Foto de síntoma",
-                            modifier = Modifier.size(96.dp),
-                            contentScale = ContentScale.Crop
-                        )
-                        IconButton(onClick = {
-                            sintoma.fotos.remove(uri)
-                        }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Eliminar foto")
+
+            if (expandido) {
+                OutlinedTextField(
+                    value = sintoma.descripcion,
+                    onValueChange = { sintoma.descripcion = it },
+                    label = { Text("Descripción del síntoma") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = sintoma.fechaTexto,
+                    onValueChange = { sintoma.fechaTexto = it },
+                    label = { Text("Fecha u hora (opcional)") },
+                    supportingText = { Text("Formato sugerido: 2024-05-01 09:30") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(onClick = {
+                        pickGallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    }) {
+                        Icon(imageVector = Icons.Default.Collections, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Galería")
+                    }
+                }
+                if (sintoma.fotos.isNotEmpty()) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(sintoma.fotos) { uri ->
+                            Box {
+                                AsyncImage(
+                                    model = uri,
+                                    contentDescription = "Foto de síntoma",
+                                    modifier = Modifier.size(96.dp),
+                                    contentScale = ContentScale.Crop
+                                )
+                                IconButton(onClick = {
+                                    sintoma.fotos.remove(uri)
+                                }) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Eliminar foto")
+                                }
+                            }
                         }
                     }
                 }
@@ -1430,10 +1486,21 @@ private fun PresupuestoSection(
             if (items.isEmpty()) {
                 Text("Aún no hay ítems agregados")
             }
-            items.forEach { item ->
+            items.forEachIndexed { _, item ->
                 PresupuestoItemRow(
                     item = item,
-                    onRemove = { items.remove(item) }
+                    onExpand = {
+                        val debeExpandir = !item.expandido
+                        items.forEach { it.expandido = false }
+                        item.expandido = debeExpandir
+                    },
+                    onRemove = {
+                        val eliminandoExpandido = item.expandido
+                        items.remove(item)
+                        if (eliminandoExpandido && items.isNotEmpty()) {
+                            items.first().expandido = true
+                        }
+                    }
                 )
             }
 
@@ -1482,6 +1549,7 @@ private fun PresupuestoSection(
                         val cantidad = nuevoItem.cantidad.toIntOrNull()
                         val precio = nuevoItem.precioUnitario.toIntOrNull()
                         if (nuevoItem.titulo.isNotBlank() && cantidad != null && precio != null) {
+                            items.forEach { it.expandido = false }
                             items += nuevoItem.copy(expandido = true)
                             nuevoItem = PresupuestoItemForm()
                         }
@@ -1516,19 +1584,39 @@ private fun PresupuestoSection(
 @Composable
 private fun PresupuestoItemRow(
     item: PresupuestoItemForm,
+    onExpand: () -> Unit,
     onRemove: () -> Unit
 ) {
-    ElevatedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { item.expandido = !item.expandido }
-    ) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (item.tipo == ItemTipo.MO) "MO" else "Repuesto", fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(8.dp))
-                Text(item.titulo.ifBlank { "Sin título" }, style = MaterialTheme.typography.bodyLarge)
-                Spacer(Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onExpand() }
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(if (item.tipo == ItemTipo.MO) "MO" else "Repuesto", fontWeight = FontWeight.Bold)
+                        Icon(
+                            imageVector = if (item.expandido) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (item.expandido) "Contraer ítem" else "Expandir ítem"
+                        )
+                    }
+                    Text(
+                        item.titulo.ifBlank { "Sin título" },
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (item.descripcion.isNotBlank()) {
+                        Text(
+                            buildItemDescripcion("", item.descripcion),
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
                 IconButton(onClick = onRemove) {
                     Icon(Icons.Default.Delete, contentDescription = "Eliminar")
                 }
