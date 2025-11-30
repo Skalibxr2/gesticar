@@ -250,7 +250,8 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
         val guardadoExitoso = uiState.mensajeCliente != null &&
             uiState.mensajeCliente?.contains("error", ignoreCase = true) != true
 
-        if (!uiState.guardandoCliente && clienteEncontrado && guardadoExitoso && modoEdicionCliente) {
+        if (!uiState.guardandoCliente && clienteEncontrado && guardadoExitoso) {
+            detallesClienteExpandido = false
             modoEdicionCliente = false
         }
     }
