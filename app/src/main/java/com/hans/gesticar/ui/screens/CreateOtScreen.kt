@@ -172,6 +172,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
     var patenteBusqueda by rememberSaveable { mutableStateOf("") }
     var mostrarConfirmarCancelarRegistro by rememberSaveable { mutableStateOf(false) }
     var vehiculoInfoDialog by remember { mutableStateOf<Vehiculo?>(null) }
+    var vehiculoOperacionPendiente by remember { mutableStateOf(false) }
 
     var presupuestoAprobado by rememberSaveable { mutableStateOf(false) }
     val items = remember { mutableStateListOf<PresupuestoItemForm>() }
@@ -306,14 +307,24 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
     }
 
     LaunchedEffect(uiState.guardandoVehiculo, uiState.mensajeVehiculo) {
-        if (!uiState.guardandoVehiculo && uiState.mensajeVehiculo != null &&
-            !uiState.mensajeVehiculo!!.contains("error", ignoreCase = true)
+        if (uiState.guardandoVehiculo) {
+            vehiculoOperacionPendiente = true
+            return@LaunchedEffect
+        }
+
+        val mensajeVehiculo = uiState.mensajeVehiculo
+        if (vehiculoOperacionPendiente && mensajeVehiculo != null &&
+            !mensajeVehiculo.contains("error", ignoreCase = true)
         ) {
             mostrarFormularioVehiculo = false
             esEdicionVehiculo = false
             flujoNuevoVehiculo = false
             patenteBusqueda = ""
             vm.limpiarBusquedaVehiculo()
+        }
+
+        if (!uiState.guardandoVehiculo) {
+            vehiculoOperacionPendiente = false
         }
     }
 
