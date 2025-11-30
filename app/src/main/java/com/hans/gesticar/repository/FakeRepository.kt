@@ -252,12 +252,24 @@ class FakeRepository : Repository {
         val ot = ots.find { it.id == otId } ?: return false
         val p = obtenerPresupuesto(otId)
         // Regla: no se puede EN_EJECUCION sin presupuesto aprobado
+        if (ot.estado == OtState.FINALIZADA || ot.estado == OtState.CANCELADA) return false
         if (nuevo == OtState.EN_EJECUCION && ot.mecanicosAsignados.isEmpty()) return false
         if (nuevo == OtState.EN_EJECUCION && !p.aprobado) return false
         // Regla: FINALIZADA solo si ya estaba en EN_EJECUCION
         if (nuevo == OtState.FINALIZADA && ot.estado != OtState.EN_EJECUCION) return false
         ot.estado = nuevo
         log(otId, "CAMBIAR_ESTADO:${nuevo}")
+        return true
+    }
+
+    override suspend fun eliminarOt(otId: String): Boolean {
+        val ot = ots.firstOrNull { it.id == otId } ?: return false
+        if (ot.estado != OtState.BORRADOR) return false
+        ots.removeIf { it.id == otId }
+        presupuestos.remove(otId)
+        tareas.remove(otId)
+        sintomasPorOt.remove(otId)
+        log(otId, "ELIMINAR_OT")
         return true
     }
 
@@ -329,7 +341,7 @@ class FakeRepository : Repository {
         val index = ots.indexOfFirst { it.id == otId }
         if (index < 0) return false
         val ot = ots[index]
-        if (ot.estado == OtState.EN_EJECUCION || ot.estado == OtState.FINALIZADA) {
+        if (ot.estado == OtState.EN_EJECUCION || ot.estado == OtState.FINALIZADA || ot.estado == OtState.CANCELADA) {
             return false
         }
         val patenteUpper = patente.uppercase()

@@ -2,7 +2,7 @@ package com.hans.gesticar.model
 
 //enum class define un tipo cerrado de valores posibles.
 //OtState representa el ciclo de vida de una Orden de Trabajo.
-enum class OtState { BORRADOR, DIAGNOSTICO, PRESUPUESTO, PEND_APROB, EN_EJECUCION, FINALIZADA }
+enum class OtState { BORRADOR, DIAGNOSTICO, PRESUPUESTO, PEND_APROB, EN_EJECUCION, FINALIZADA, CANCELADA }
 
 //Tipifica cada ítem del presupuesto.
 //REP: repuesto (tiene cantidad y PU).

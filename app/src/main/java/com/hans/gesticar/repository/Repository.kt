@@ -20,6 +20,7 @@ interface Repository {
     suspend fun buscarOtPorEstado(estado: OtState): List<Ot>
     suspend fun aprobarPresupuesto(otId: String)
     suspend fun cambiarEstado(otId: String, nuevo: OtState): Boolean
+    suspend fun eliminarOt(otId: String): Boolean
     suspend fun obtenerMecanicos(): List<Usuario>
     suspend fun obtenerSiguienteNumeroOt(): Int
     suspend fun obtenerDetalleOt(otId: String): OtDetalle?
