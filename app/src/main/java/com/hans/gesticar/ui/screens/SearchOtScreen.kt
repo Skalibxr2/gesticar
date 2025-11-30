@@ -361,6 +361,7 @@ private fun OtDetailPanel(
         OtState.EN_EJECUCION, OtState.FINALIZADA -> false
         else -> true
     }
+    val permiteCambiarEstadoTareas = detalle.ot.estado == OtState.EN_EJECUCION
     // Una OT finalizada queda solo para consulta; bloqueamos todas las acciones.
     val soloLectura = detalle.ot.estado == OtState.FINALIZADA
     val tieneItemsValidos = items.any { item ->
@@ -521,6 +522,7 @@ private fun OtDetailPanel(
                 TasksSection(
                     tasks = tareas,
                     soloLectura = soloLectura,
+                    permiteCambiarEstado = permiteCambiarEstadoTareas,
                     modifier = Modifier.fillMaxWidth(),
                     title = "Tareas preventivas o correctivas",
                     expandido = tareasExpandido,
