@@ -157,6 +157,12 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
     var kilometraje by rememberSaveable { mutableStateOf("") }
     var combustible by rememberSaveable { mutableStateOf("") }
 
+    var patenteError by rememberSaveable { mutableStateOf(false) }
+    var marcaError by rememberSaveable { mutableStateOf(false) }
+    var modeloError by rememberSaveable { mutableStateOf(false) }
+    var anioError by rememberSaveable { mutableStateOf(false) }
+    var kilometrajeError by rememberSaveable { mutableStateOf(false) }
+
     var detallesClienteExpandido by rememberSaveable { mutableStateOf(false) }
     var modoEdicionCliente by rememberSaveable { mutableStateOf(false) }
     var creandoCliente by rememberSaveable { mutableStateOf(false) }
@@ -189,6 +195,11 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             color = ""
             kilometraje = ""
             combustible = ""
+            patenteError = false
+            marcaError = false
+            modeloError = false
+            anioError = false
+            kilometrajeError = false
             presupuestoAprobado = false
             detallesClienteExpandido = false
             modoEdicionCliente = false
@@ -388,19 +399,39 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
         VehiculoSection(
             rutCliente = rutNormalizado,
             patente = patente,
-            onPatenteChange = { patente = it.uppercase() },
+            onPatenteChange = {
+                patenteError = false
+                patente = it.uppercase()
+            },
             marca = marca,
-            onMarcaChange = { marca = it },
+            onMarcaChange = {
+                marcaError = false
+                marca = it
+            },
             modelo = modelo,
-            onModeloChange = { modelo = it },
+            onModeloChange = {
+                modeloError = false
+                modelo = it
+            },
             anio = anio,
-            onAnioChange = { anio = it.filter { ch -> ch.isDigit() }.take(4) },
+            onAnioChange = {
+                anioError = false
+                anio = it.filter { ch -> ch.isDigit() }.take(4)
+            },
             color = color,
             onColorChange = { color = it },
             kilometraje = kilometraje,
-            onKilometrajeChange = { kilometraje = it.filter { ch -> ch.isDigit() } },
+            onKilometrajeChange = {
+                kilometrajeError = false
+                kilometraje = it.filter { ch -> ch.isDigit() }
+            },
             combustible = combustible,
             onCombustibleChange = { combustible = it },
+            patenteError = patenteError,
+            marcaError = marcaError,
+            modeloError = modeloError,
+            anioError = anioError,
+            kilometrajeError = kilometrajeError,
             vehiculos = if (rutNormalizado == uiState.cliente?.rut) uiState.vehiculosCliente else emptyList(),
             vehiculoSeleccionado = vehiculoSeleccionado,
             onSeleccionarVehiculo = { vehiculo ->
@@ -413,17 +444,28 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
                 val errores = mutableListOf<String>()
                 val anioInt = anio.toIntOrNull()
                 val kmInt = kilometraje.toIntOrNull()
+                patenteError = patente.isBlank()
+                marcaError = marca.isBlank()
+                modeloError = modelo.isBlank()
+                anioError = anio.length != 4 || anioInt == null
+                kilometrajeError = (flujoNuevoVehiculo && kilometraje.isBlank()) ||
+                    (kilometraje.isNotBlank() && kmInt == null)
+
                 if (rutNormalizado == null) errores += "cliente"
-                if (patente.isBlank()) errores += "patente"
-                if (marca.isBlank()) errores += "marca"
-                if (modelo.isBlank()) errores += "modelo"
-                if (anio.length != 4 || anioInt == null) errores += "año"
-                if (flujoNuevoVehiculo && kilometraje.isBlank()) errores += "kilometraje"
-                if (kilometraje.isNotBlank() && kmInt == null) errores += "kilometraje numérico"
+                if (patenteError) errores += "patente"
+                if (marcaError) errores += "marca"
+                if (modeloError) errores += "modelo"
+                if (anioError) errores += "año"
+                if (kilometrajeError) errores += "kilometraje"
                 if (errores.isNotEmpty()) {
                     vm.reportarMensajeVehiculo("Completa correctamente: ${errores.joinToString(", ")}")
                     return@VehiculoSection
                 }
+                patenteError = false
+                marcaError = false
+                modeloError = false
+                anioError = false
+                kilometrajeError = false
                 val vehiculo = Vehiculo(
                     patente = patente.uppercase(),
                     clienteRut = rutNormalizado ?: "",
@@ -456,6 +498,11 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
                 mostrarFormularioVehiculo = false
                 esEdicionVehiculo = false
                 patenteBusqueda = ""
+                patenteError = false
+                marcaError = false
+                modeloError = false
+                anioError = false
+                kilometrajeError = false
                 vm.limpiarBusquedaVehiculo()
                 vm.limpiarMensajesVehiculo()
             },
@@ -955,6 +1002,11 @@ private fun VehiculoSection(
     onKilometrajeChange: (String) -> Unit,
     combustible: String,
     onCombustibleChange: (String) -> Unit,
+    patenteError: Boolean,
+    marcaError: Boolean,
+    modeloError: Boolean,
+    anioError: Boolean,
+    kilometrajeError: Boolean,
     vehiculos: List<Vehiculo>,
     vehiculoSeleccionado: String?,
     onSeleccionarVehiculo: (Vehiculo?) -> Unit,
@@ -1125,20 +1177,32 @@ private fun VehiculoSection(
                     onValueChange = onPatenteChange,
                     label = { Text("Patente") },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = !patenteSoloLectura
+                    enabled = !patenteSoloLectura,
+                    isError = patenteError,
+                    supportingText = {
+                        if (patenteError) Text("La patente es obligatoria")
+                    }
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = marca,
                         onValueChange = onMarcaChange,
                         label = { Text("Marca") },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        isError = marcaError,
+                        supportingText = {
+                            if (marcaError) Text("La marca es obligatoria")
+                        }
                     )
                     OutlinedTextField(
                         value = modelo,
                         onValueChange = onModeloChange,
                         label = { Text("Modelo") },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        isError = modeloError,
+                        supportingText = {
+                            if (modeloError) Text("El modelo es obligatorio")
+                        }
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1148,6 +1212,10 @@ private fun VehiculoSection(
                         label = { Text("Año") },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        isError = anioError,
+                        supportingText = {
+                            if (anioError) Text("Ingresa un año válido (4 dígitos)")
+                        }
                     )
                     OutlinedTextField(
                         value = color,
@@ -1162,7 +1230,11 @@ private fun VehiculoSection(
                         onValueChange = onKilometrajeChange,
                         label = { Text("Kilometraje") },
                         modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        isError = kilometrajeError,
+                        supportingText = {
+                            if (kilometrajeError) Text("Ingresa un kilometraje válido")
+                        }
                     )
                     OutlinedTextField(
                         value = combustible,
