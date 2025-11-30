@@ -1,9 +1,18 @@
 package com.hans.gesticar.ui.screens
 
+import android.Manifest
+import android.content.ContentValues
+import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,14 +26,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -60,11 +69,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.hans.gesticar.model.Cliente
@@ -77,14 +88,14 @@ import com.hans.gesticar.ui.Routes
 import com.hans.gesticar.ui.components.EditableTaskState
 import com.hans.gesticar.ui.components.TasksSection
 import com.hans.gesticar.ui.components.toTareaOt
-import com.hans.gesticar.viewmodel.MainViewModel
 import com.hans.gesticar.util.formatRutInput
 import com.hans.gesticar.util.isRutValid
 import com.hans.gesticar.util.normalizeRut
 import com.hans.gesticar.util.sanitizeRutInput
-import java.util.UUID
 import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 private class PresupuestoItemForm(
     val id: String = UUID.randomUUID().toString(),
@@ -123,25 +134,19 @@ private fun PresupuestoItemForm.copy(
 
 private class SymptomForm(
     descripcion: String = "",
-    fechaTexto: String = "",
     fotos: List<Uri> = emptyList(),
-    expandido: Boolean = false
+    expandido: Boolean = false,
+    val registradoEn: Long = System.currentTimeMillis()
 ) {
     var descripcion by mutableStateOf(descripcion)
-    var fechaTexto by mutableStateOf(fechaTexto)
     val fotos = mutableStateListOf<Uri>().apply { addAll(fotos) }
     var expandido by mutableStateOf(expandido)
-}
-
-private val symptomFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-
-private fun parseSymptomTimestamp(text: String): Long? = text.takeIf { it.isNotBlank() }?.let {
-    runCatching { symptomFormatter.parse(it)?.time }.getOrNull()
 }
 
 @Composable
 fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
     val uiState by vm.createOtUi.collectAsState()
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         vm.prepararNuevaOt()
@@ -184,7 +189,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
     val items = remember { mutableStateListOf<PresupuestoItemForm>() }
     val seleccionMecanicos = remember { mutableStateListOf<String>() }
     var vehiculoSeleccionado by rememberSaveable { mutableStateOf<String?>(null) }
-    val sintomas = remember { mutableStateListOf(SymptomForm(expandido = true)) }
+    val sintomas = remember { mutableStateListOf<SymptomForm>() }
     val tareas = remember { mutableStateListOf(EditableTaskState()) }
     var mostrarCancelarCreacionCliente by rememberSaveable { mutableStateOf(false) }
 
@@ -222,7 +227,6 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             vehiculoSeleccionado = null
             items.clear()
             sintomas.clear()
-            sintomas += SymptomForm(expandido = true)
             tareas.clear()
             tareas += EditableTaskState()
         }
@@ -299,6 +303,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             color = ""
             kilometraje = ""
             combustible = ""
+            sintomas.clear()
         }
     }
 
@@ -624,23 +629,29 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
 
         SymptomsSection(
             sintomas = sintomas,
+            habilitado = vehiculoSeleccionado != null,
             onExpandSintoma = { seleccionado ->
-                val debeExpandir = sintomas.getOrNull(seleccionado)?.expandido != true
-                sintomas.forEachIndexed { index, sintoma ->
-                    sintoma.expandido = debeExpandir && index == seleccionado
+                if (!vehiculoSeleccionado.isNullOrBlank()) {
+                    val debeExpandir = sintomas.getOrNull(seleccionado)?.expandido != true
+                    sintomas.forEachIndexed { index, sintoma ->
+                        sintoma.expandido = debeExpandir && index == seleccionado
+                    }
                 }
             },
             onAgregarSintoma = {
+                if (vehiculoSeleccionado == null) {
+                    Toast.makeText(context, "Selecciona un vehículo para agregar síntomas", Toast.LENGTH_SHORT)
+                        .show()
+                    return@SymptomsSection
+                }
                 sintomas.forEach { it.expandido = false }
                 sintomas += SymptomForm(expandido = true)
             },
             onEliminarSintoma = { index ->
-                if (sintomas.size > 1) {
-                    val eliminandoExpandido = sintomas.getOrNull(index)?.expandido == true
-                    sintomas.removeAt(index)
-                    if (eliminandoExpandido || sintomas.none { it.expandido }) {
-                        sintomas.firstOrNull()?.expandido = true
-                    }
+                val eliminandoExpandido = sintomas.getOrNull(index)?.expandido == true
+                sintomas.removeAt(index)
+                if (eliminandoExpandido || sintomas.none { it.expandido }) {
+                    sintomas.firstOrNull()?.expandido = true
                 }
             }
         )
@@ -690,10 +701,9 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
         }
         val sintomasValidos = sintomas.mapNotNull { form ->
             if (form.descripcion.isBlank()) return@mapNotNull null
-            val timestamp = parseSymptomTimestamp(form.fechaTexto)
             SintomaInput(
                 descripcion = form.descripcion,
-                registradoEn = timestamp,
+                registradoEn = form.registradoEn,
                 fotos = form.fotos.map(Uri::toString)
             )
         }
@@ -990,6 +1000,7 @@ private fun ClienteSection(
 @Composable
 private fun SymptomsSection(
     sintomas: List<SymptomForm>,
+    habilitado: Boolean,
     onExpandSintoma: (Int) -> Unit,
     onAgregarSintoma: () -> Unit,
     onEliminarSintoma: (Int) -> Unit
@@ -998,9 +1009,16 @@ private fun SymptomsSection(
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Síntomas del vehículo", style = MaterialTheme.typography.titleMedium)
             Text(
-                text = "Agrega cada síntoma por separado con su fecha opcional y adjunta las fotos correspondientes.",
+                text = "Agrega cada síntoma por separado y adjunta las fotos correspondientes. La fecha se registra automáticamente al añadirlo.",
                 style = MaterialTheme.typography.bodySmall
             )
+            if (!habilitado) {
+                Text(
+                    text = "Selecciona un vehículo para habilitar esta sección.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             sintomas.forEachIndexed { index, sintoma ->
                 SymptomCard(
                     indice = index + 1,
@@ -1011,13 +1029,28 @@ private fun SymptomsSection(
                         { onEliminarSintoma(index) }
                     } else {
                         null
-                    }
+                    },
+                    habilitado = habilitado
                 )
                 if (index < sintomas.lastIndex) {
                     Divider()
                 }
             }
-            Button(onClick = onAgregarSintoma, modifier = Modifier.align(Alignment.End)) {
+            if (sintomas.isEmpty()) {
+                Text(
+                    text = if (habilitado) {
+                        "Presiona \"Agregar síntoma\" para registrar el primer síntoma del vehículo."
+                    } else {
+                        "Los síntomas estarán disponibles cuando el vehículo esté seleccionado."
+                    },
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Button(
+                onClick = onAgregarSintoma,
+                modifier = Modifier.align(Alignment.End),
+                enabled = habilitado
+            ) {
                 Icon(Icons.Default.Add, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text("Agregar síntoma")
@@ -1032,12 +1065,65 @@ private fun SymptomCard(
     sintoma: SymptomForm,
     expandido: Boolean,
     onExpand: () -> Unit,
-    onRemove: (() -> Unit)?
+    onRemove: (() -> Unit)?,
+    habilitado: Boolean
 ) {
+    val context = LocalContext.current
+    var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingCameraAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    val requestCameraPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            pendingCameraAction?.invoke()
+        } else {
+            Toast.makeText(context, "Se requiere permiso de cámara", Toast.LENGTH_SHORT).show()
+        }
+        pendingCameraAction = null
+    }
+
+    val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        val uri = pendingCameraUri
+        if (success && uri != null) {
+            if (uri !in sintoma.fotos) {
+                sintoma.fotos.add(uri)
+            }
+        } else if (uri != null) {
+            context.contentResolver.delete(uri, null, null)
+        }
+        pendingCameraUri = null
+    }
+
     val pickGallery = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
         uris.forEach { uri ->
             if (uri !in sintoma.fotos) {
                 sintoma.fotos.add(uri)
+            }
+        }
+    }
+
+    fun ensureCameraPermission(onPermissionGranted: () -> Unit) {
+        val hasPermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+        if (hasPermission) {
+            onPermissionGranted()
+        } else {
+            pendingCameraAction = onPermissionGranted
+            requestCameraPermission.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    fun openCamera() {
+        ensureCameraPermission {
+            val uri = createSymptomImageUri(context)
+            if (uri != null) {
+                pendingCameraUri = uri
+                takePhoto.launch(uri)
+            } else {
+                Toast.makeText(context, "No se pudo abrir la cámara", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -1051,7 +1137,7 @@ private fun SymptomCard(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .clickable { onExpand() }
+                        .clickable(enabled = habilitado) { onExpand() }
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Síntoma #$indice", style = MaterialTheme.typography.labelLarge)
@@ -1068,7 +1154,7 @@ private fun SymptomCard(
                     )
                 }
                 if (onRemove != null) {
-                    IconButton(onClick = onRemove) {
+                    IconButton(onClick = onRemove, enabled = habilitado) {
                         Icon(Icons.Default.Delete, contentDescription = "Eliminar síntoma")
                     }
                 }
@@ -1079,19 +1165,21 @@ private fun SymptomCard(
                     value = sintoma.descripcion,
                     onValueChange = { sintoma.descripcion = it },
                     label = { Text("Descripción del síntoma") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = sintoma.fechaTexto,
-                    onValueChange = { sintoma.fechaTexto = it },
-                    label = { Text("Fecha u hora (opcional)") },
-                    supportingText = { Text("Formato sugerido: 2024-05-01 09:30") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = habilitado
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = {
-                        pickGallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                    }) {
+                    OutlinedButton(onClick = { openCamera() }, enabled = habilitado) {
+                        Icon(imageVector = Icons.Default.AddAPhoto, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Cámara")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            pickGallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        },
+                        enabled = habilitado
+                    ) {
                         Icon(imageVector = Icons.Default.Collections, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text("Galería")
@@ -1119,6 +1207,24 @@ private fun SymptomCard(
             }
         }
     }
+}
+
+private fun createSymptomImageUri(context: Context): Uri? {
+    val resolver = context.contentResolver
+    val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+    val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+    } else {
+        MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+    }
+    val contentValues = ContentValues().apply {
+        put(MediaStore.Images.Media.DISPLAY_NAME, "gesticar_sintoma_$timeStamp.jpg")
+        put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Gesticar")
+        }
+    }
+    return resolver.insert(collection, contentValues)
 }
 
 @Composable
