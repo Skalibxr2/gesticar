@@ -416,7 +416,7 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             AlertDialog(
                 onDismissRequest = { mostrarCancelarCreacionCliente = false },
                 title = { Text("Cancelar creación de cliente") },
-                text = { Text("Se perderán los datos ingresados. ¿Deseas continuar?") },
+                text = { Text("No se guardarán los daton ingresados. ¿Deseas cancelar?") },
                 confirmButton = {
                     TextButton(
                         onClick = {
