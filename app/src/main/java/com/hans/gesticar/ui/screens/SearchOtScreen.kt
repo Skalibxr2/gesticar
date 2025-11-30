@@ -317,6 +317,8 @@ private fun OtDetailPanel(
     var ivaTexto by remember { mutableStateOf(detalle.presupuesto.ivaPorc.toString()) }
     val items = remember { mutableStateListOf<PresupuestoItemFormState>() }
     val tareas = remember { mutableStateListOf<EditableTaskState>() }
+    var tareasExpandido by remember { mutableStateOf(false) }
+    var mostrarFormularioTareas by remember { mutableStateOf(false) }
     var presupuestoError by remember { mutableStateOf<String?>(null) }
     var nuevoItem by remember { mutableStateOf(PresupuestoItemFormState()) }
     var mostrarErroresNuevoItem by remember { mutableStateOf(false) }
@@ -351,9 +353,8 @@ private fun OtDetailPanel(
         detalle.tareas.forEach { tarea ->
             tareas += tarea.toEditableTaskState()
         }
-        if (tareas.isEmpty()) {
-            tareas += EditableTaskState()
-        }
+        tareasExpandido = false
+        mostrarFormularioTareas = false
     }
 
     val vehiculoEditable = when (detalle.ot.estado) {
@@ -521,7 +522,18 @@ private fun OtDetailPanel(
                     tasks = tareas,
                     soloLectura = soloLectura,
                     modifier = Modifier.fillMaxWidth(),
-                    title = "Tareas preventivas o correctivas"
+                    title = "Tareas preventivas o correctivas",
+                    expandido = tareasExpandido,
+                    mostrarFormulario = mostrarFormularioTareas,
+                    onToggleExpandido = {
+                        tareasExpandido = !tareasExpandido
+                        if (!tareasExpandido) {
+                            mostrarFormularioTareas = false
+                        }
+                    },
+                    onToggleFormulario = { mostrarFormularioTareas = !mostrarFormularioTareas },
+                    onAddTask = { nuevaTarea -> tareas += nuevaTarea },
+                    onRemoveTask = { tarea -> tareas.remove(tarea) }
                 )
                 Button(
                     onClick = {
