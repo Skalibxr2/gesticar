@@ -1036,11 +1036,7 @@ private fun SymptomsSection(
                     sintoma = sintoma,
                     expandido = sintoma.expandido,
                     onExpand = { onExpandSintoma(index) },
-                    onRemove = if (sintomas.size > 1) {
-                        { onEliminarSintoma(index) }
-                    } else {
-                        null
-                    },
+                    onRemove = { onEliminarSintoma(index) },
                     habilitado = habilitado
                 )
                 if (index < sintomas.lastIndex) {
@@ -1084,8 +1080,9 @@ private fun SymptomCard(
     var pendingCameraAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     val requestCameraPermission = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val granted = result.values.all { it }
         if (granted) {
             pendingCameraAction?.invoke()
         } else {
@@ -1115,15 +1112,22 @@ private fun SymptomCard(
     }
 
     fun ensureCameraPermission(onPermissionGranted: () -> Unit) {
-        val hasPermission = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.CAMERA
-        ) == PackageManager.PERMISSION_GRANTED
-        if (hasPermission) {
+        val requiredPermissions = buildList {
+            add(Manifest.permission.CAMERA)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+        }
+
+        val hasPermissions = requiredPermissions.all { permission ->
+            ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        }
+
+        if (hasPermissions) {
             onPermissionGranted()
         } else {
             pendingCameraAction = onPermissionGranted
-            requestCameraPermission.launch(Manifest.permission.CAMERA)
+            requestCameraPermission.launch(requiredPermissions.toTypedArray())
         }
     }
 
@@ -1213,6 +1217,26 @@ private fun SymptomCard(
                                 }
                             }
                         }
+                    }
+                }
+                Row(
+                    horizontalArrangement = Arrangement.End,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (onRemove != null) {
+                        TextButton(onClick = onRemove, enabled = habilitado) {
+                            Text("Cancelar")
+                        }
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Button(
+                        onClick = {
+                            sintoma.descripcion = sintoma.descripcion.trim()
+                            sintoma.expandido = false
+                        },
+                        enabled = habilitado && (sintoma.descripcion.isNotBlank() || sintoma.fotos.isNotEmpty())
+                    ) {
+                        Text("Guardar")
                     }
                 }
             }
