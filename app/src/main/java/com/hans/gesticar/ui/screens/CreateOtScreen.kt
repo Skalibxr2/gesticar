@@ -188,11 +188,13 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
     var presupuestoAprobado by rememberSaveable { mutableStateOf(false) }
     var presupuestoExpandido by rememberSaveable { mutableStateOf(false) }
     var mostrarFormularioPresupuesto by rememberSaveable { mutableStateOf(false) }
+    var tareasExpandido by rememberSaveable { mutableStateOf(false) }
+    var mostrarFormularioTareas by rememberSaveable { mutableStateOf(false) }
     val items = remember { mutableStateListOf<PresupuestoItemForm>() }
     val seleccionMecanicos = remember { mutableStateListOf<String>() }
     var vehiculoSeleccionado by rememberSaveable { mutableStateOf<String?>(null) }
     val sintomas = remember { mutableStateListOf<SymptomForm>() }
-    val tareas = remember { mutableStateListOf(EditableTaskState()) }
+    val tareas = remember { mutableStateListOf<EditableTaskState>() }
     var mostrarCancelarCreacionCliente by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(uiState.exito) {
@@ -230,7 +232,8 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             items.clear()
             sintomas.clear()
             tareas.clear()
-            tareas += EditableTaskState()
+            tareasExpandido = false
+            mostrarFormularioTareas = false
         }
     }
 
@@ -688,7 +691,18 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             tasks = tareas,
             soloLectura = false,
             title = "Tareas preventivas o correctivas",
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            expandido = tareasExpandido,
+            mostrarFormulario = mostrarFormularioTareas,
+            onToggleExpandido = {
+                tareasExpandido = !tareasExpandido
+                if (!tareasExpandido) {
+                    mostrarFormularioTareas = false
+                }
+            },
+            onToggleFormulario = { mostrarFormularioTareas = !mostrarFormularioTareas },
+            onAddTask = { nuevaTarea -> tareas += nuevaTarea },
+            onRemoveTask = { tarea -> tareas.remove(tarea) }
         )
 
         val anioInt = anio.toIntOrNull()
