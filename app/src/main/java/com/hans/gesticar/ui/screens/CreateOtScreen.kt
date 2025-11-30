@@ -234,6 +234,15 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
         }
     }
 
+    LaunchedEffect(uiState.guardandoCliente, uiState.mensajeCliente, clienteEncontrado) {
+        val guardadoExitoso = uiState.mensajeCliente != null &&
+            uiState.mensajeCliente?.contains("error", ignoreCase = true) != true
+
+        if (!uiState.guardandoCliente && clienteEncontrado && guardadoExitoso && modoEdicionCliente) {
+            modoEdicionCliente = false
+        }
+    }
+
     LaunchedEffect(uiState.cliente?.rut, rutNormalizado, creandoCliente) {
         val cliente = uiState.cliente
         if (cliente != null && rutNormalizado == normalizeRut(cliente.rut)) {
