@@ -191,6 +191,8 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
     var mostrarFormularioPresupuesto by rememberSaveable { mutableStateOf(false) }
     var tareasExpandido by rememberSaveable { mutableStateOf(false) }
     var mostrarFormularioTareas by rememberSaveable { mutableStateOf(false) }
+    var sintomasExpandido by rememberSaveable { mutableStateOf(false) }
+    var mecanicosExpandido by rememberSaveable { mutableStateOf(false) }
     val items = remember { mutableStateListOf<PresupuestoItemForm>() }
     val seleccionMecanicos = remember { mutableStateListOf<String>() }
     var vehiculoSeleccionado by rememberSaveable { mutableStateOf<String?>(null) }
@@ -235,6 +237,8 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
             tareas.clear()
             tareasExpandido = false
             mostrarFormularioTareas = false
+            sintomasExpandido = false
+            mecanicosExpandido = false
         }
     }
 
@@ -636,6 +640,8 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
         SymptomsSection(
             sintomas = sintomas,
             habilitado = vehiculoSeleccionado != null,
+            expandido = sintomasExpandido,
+            onToggleExpandido = { sintomasExpandido = !sintomasExpandido },
             onExpandSintoma = { seleccionado ->
                 if (!vehiculoSeleccionado.isNullOrBlank()) {
                     val debeExpandir = sintomas.getOrNull(seleccionado)?.expandido != true
@@ -665,6 +671,8 @@ fun CreateOtScreen(vm: MainViewModel, nav: NavController) {
         MecanicosSection(
             mecanicos = uiState.mecanicos,
             seleccionados = uiState.mecanicos.filter { it.id in seleccionMecanicos },
+            expandido = mecanicosExpandido,
+            onToggleExpandido = { mecanicosExpandido = !mecanicosExpandido },
             onSelect = { mecanico ->
                 if (mecanico.id !in seleccionMecanicos) {
                     seleccionMecanicos += mecanico.id
@@ -1027,55 +1035,80 @@ private fun ClienteSection(
 private fun SymptomsSection(
     sintomas: List<SymptomForm>,
     habilitado: Boolean,
+    expandido: Boolean,
+    onToggleExpandido: () -> Unit,
     onExpandSintoma: (Int) -> Unit,
     onAgregarSintoma: () -> Unit,
     onEliminarSintoma: (Int) -> Unit
 ) {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Síntomas del vehículo", style = MaterialTheme.typography.titleMedium)
-            Text(
-                text = "Agrega cada síntoma por separado y adjunta las fotos correspondientes. La fecha se registra automáticamente al añadirlo.",
-                style = MaterialTheme.typography.bodySmall
-            )
-            if (!habilitado) {
-                Text(
-                    text = "Selecciona un vehículo para habilitar esta sección.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            sintomas.forEachIndexed { index, sintoma ->
-                SymptomCard(
-                    indice = index + 1,
-                    sintoma = sintoma,
-                    expandido = sintoma.expandido,
-                    onExpand = { onExpandSintoma(index) },
-                    onRemove = { onEliminarSintoma(index) },
-                    habilitado = habilitado
-                )
-                if (index < sintomas.lastIndex) {
-                    Divider()
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggleExpandido() }
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Síntomas del vehículo", style = MaterialTheme.typography.titleMedium)
+                    if (!expandido) {
+                        Text(
+                            "Toca para ver y editar los síntomas",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
+                Icon(
+                    imageVector = if (expandido) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expandido) "Contraer síntomas" else "Expandir síntomas"
+                )
             }
-            if (sintomas.isEmpty()) {
+
+            if (expandido) {
                 Text(
-                    text = if (habilitado) {
-                        "Presiona \"Agregar síntoma\" para registrar el primer síntoma del vehículo."
-                    } else {
-                        "Los síntomas estarán disponibles cuando el vehículo esté seleccionado."
-                    },
+                    text = "Agrega cada síntoma por separado y adjunta las fotos correspondientes. La fecha se registra automáticamente al añadirlo.",
                     style = MaterialTheme.typography.bodySmall
                 )
-            }
-            Button(
-                onClick = onAgregarSintoma,
-                modifier = Modifier.align(Alignment.End),
-                enabled = habilitado
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Agregar síntoma")
+                if (!habilitado) {
+                    Text(
+                        text = "Selecciona un vehículo para habilitar esta sección.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                sintomas.forEachIndexed { index, sintoma ->
+                    SymptomCard(
+                        indice = index + 1,
+                        sintoma = sintoma,
+                        expandido = sintoma.expandido,
+                        onExpand = { onExpandSintoma(index) },
+                        onRemove = { onEliminarSintoma(index) },
+                        habilitado = habilitado
+                    )
+                    if (index < sintomas.lastIndex) {
+                        Divider()
+                    }
+                }
+                if (sintomas.isEmpty()) {
+                    Text(
+                        text = if (habilitado) {
+                            "Presiona \"Agregar síntoma\" para registrar el primer síntoma del vehículo."
+                        } else {
+                            "Los síntomas estarán disponibles cuando el vehículo esté seleccionado."
+                        },
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Button(
+                    onClick = onAgregarSintoma,
+                    modifier = Modifier.align(Alignment.End),
+                    enabled = habilitado
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Agregar síntoma")
+                }
             }
         }
     }
@@ -1578,49 +1611,74 @@ private fun VehiculoSection(
 private fun MecanicosSection(
     mecanicos: List<Usuario>,
     seleccionados: List<Usuario>,
+    expandido: Boolean,
+    onToggleExpandido: () -> Unit,
     onSelect: (Usuario) -> Unit,
     onRemove: (Usuario) -> Unit
 ) {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Mecánicos asignados", style = MaterialTheme.typography.titleMedium)
-            if (mecanicos.isEmpty()) {
-                Text("No hay mecánicos registrados", style = MaterialTheme.typography.bodyMedium)
-                return@Column
-            }
-            val seleccionadosIds = seleccionados.map(Usuario::id).toSet()
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                mecanicos.forEach { mecanico ->
-                    val estaSeleccionado = mecanico.id in seleccionadosIds
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .toggleable(
-                                value = estaSeleccionado,
-                                role = Role.Checkbox,
-                                onValueChange = { marcado ->
-                                    if (marcado && !estaSeleccionado) {
-                                        onSelect(mecanico)
-                                    } else if (!marcado && estaSeleccionado) {
-                                        onRemove(mecanico)
-                                    }
-                                }
-                            )
-                    ) {
-                        Checkbox(
-                            checked = estaSeleccionado,
-                            onCheckedChange = null
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggleExpandido() }
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Mecánicos asignados", style = MaterialTheme.typography.titleMedium)
+                    if (!expandido) {
+                        Text(
+                            "Toca para ver y editar los mecánicos", 
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Column(modifier = Modifier.padding(start = 12.dp)) {
-                            Text(mecanico.nombre, style = MaterialTheme.typography.bodyLarge)
-                            Text(mecanico.email, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                Icon(
+                    imageVector = if (expandido) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expandido) "Contraer mecánicos" else "Expandir mecánicos"
+                )
+            }
+
+            if (expandido) {
+                if (mecanicos.isEmpty()) {
+                    Text("No hay mecánicos registrados", style = MaterialTheme.typography.bodyMedium)
+                    return@Column
+                }
+                val seleccionadosIds = seleccionados.map(Usuario::id).toSet()
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    mecanicos.forEach { mecanico ->
+                        val estaSeleccionado = mecanico.id in seleccionadosIds
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .toggleable(
+                                    value = estaSeleccionado,
+                                    role = Role.Checkbox,
+                                    onValueChange = { marcado ->
+                                        if (marcado && !estaSeleccionado) {
+                                            onSelect(mecanico)
+                                        } else if (!marcado && estaSeleccionado) {
+                                            onRemove(mecanico)
+                                        }
+                                    }
+                                )
+                        ) {
+                            Checkbox(
+                                checked = estaSeleccionado,
+                                onCheckedChange = null
+                            )
+                            Column(modifier = Modifier.padding(start = 12.dp)) {
+                                Text(mecanico.nombre, style = MaterialTheme.typography.bodyLarge)
+                                Text(mecanico.email, style = MaterialTheme.typography.bodySmall)
+                            }
                         }
                     }
                 }
-            }
-            if (seleccionados.isEmpty()) {
-                Text("Selecciona al menos un mecánico", style = MaterialTheme.typography.bodySmall)
+                if (seleccionados.isEmpty()) {
+                    Text("Selecciona al menos un mecánico", style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
     }
