@@ -319,6 +319,7 @@ private fun OtDetailPanel(
     val tareas = remember { mutableStateListOf<EditableTaskState>() }
     var presupuestoError by remember { mutableStateOf<String?>(null) }
     var nuevoItem by remember { mutableStateOf(PresupuestoItemFormState()) }
+    var mostrarErroresNuevoItem by remember { mutableStateOf(false) }
 
     LaunchedEffect(detalle.ot.id, vehiculosCliente) {
         notas = detalle.ot.notas.orEmpty()
@@ -345,6 +346,7 @@ private fun OtDetailPanel(
             items += PresupuestoItemFormState(expandido = true)
         }
         nuevoItem = PresupuestoItemFormState()
+        mostrarErroresNuevoItem = false
         tareas.clear()
         detalle.tareas.forEach { tarea ->
             tareas += tarea.toEditableTaskState()
@@ -545,6 +547,95 @@ private fun OtDetailPanel(
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Presupuesto", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Los precios/día incluyen IVA",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (!soloLectura) {
+                    Text("Agregar ítem", style = MaterialTheme.typography.titleSmall)
+                    Text("Tipo de ítem del presupuesto", style = MaterialTheme.typography.bodySmall)
+                    AssistChip(
+                        onClick = {
+                            nuevoItem = nuevoItem.copy(tipo = if (nuevoItem.tipo == ItemTipo.MO) ItemTipo.REP else ItemTipo.MO)
+                        },
+                        label = { Text(if (nuevoItem.tipo == ItemTipo.MO) "Mano de obra" else "Repuestos") },
+                        colors = AssistChipDefaults.assistChipColors()
+                    )
+                    val tituloInvalido = nuevoItem.titulo.isBlank()
+                    OutlinedTextField(
+                        value = nuevoItem.titulo,
+                        onValueChange = { nuevoItem = nuevoItem.copy(titulo = it) },
+                        label = { Text("Título del ítem") },
+                        enabled = !soloLectura,
+                        isError = mostrarErroresNuevoItem && tituloInvalido,
+                        supportingText = {
+                            if (mostrarErroresNuevoItem && tituloInvalido) {
+                                Text("Campo obligatorio", color = MaterialTheme.colorScheme.error)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = nuevoItem.descripcion,
+                        onValueChange = { nuevoItem = nuevoItem.copy(descripcion = it) },
+                        label = { Text("Descripción") },
+                        enabled = !soloLectura,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    val cantidad = nuevoItem.cantidad.toIntOrNull()
+                    val precio = nuevoItem.precio.toIntOrNull()
+                    val cantidadInvalida = cantidad == null
+                    val precioInvalido = precio == null
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = nuevoItem.cantidad,
+                            onValueChange = { nuevoItem = nuevoItem.copy(cantidad = it.filter(Char::isDigit)) },
+                            label = { Text("Cantidad (días)") },
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            enabled = !soloLectura,
+                            isError = mostrarErroresNuevoItem && cantidadInvalida,
+                            supportingText = {
+                                if (mostrarErroresNuevoItem && cantidadInvalida) {
+                                    Text("Campo obligatorio", color = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                        )
+                        OutlinedTextField(
+                            value = nuevoItem.precio,
+                            onValueChange = { nuevoItem = nuevoItem.copy(precio = it.filter(Char::isDigit)) },
+                            label = { Text("Precio/día (con IVA)") },
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            enabled = !soloLectura,
+                            isError = mostrarErroresNuevoItem && precioInvalido,
+                            supportingText = {
+                                if (mostrarErroresNuevoItem && precioInvalido) {
+                                    Text("Campo obligatorio", color = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                        )
+                    }
+                    Button(
+                        onClick = {
+                            val tituloValido = nuevoItem.titulo.isNotBlank()
+                            val cantidadValida = cantidad != null
+                            val precioValido = precio != null
+                            if (tituloValido && cantidadValida && precioValido) {
+                                mostrarErroresNuevoItem = false
+                                items += nuevoItem.copy(expandido = false)
+                                nuevoItem = PresupuestoItemFormState()
+                            } else {
+                                mostrarErroresNuevoItem = true
+                            }
+                        },
+                        enabled = !soloLectura
+                    ) {
+                        Text("Agregar ítem")
+                    }
+                    Divider()
+                }
                 Text("Ítems del presupuesto", style = MaterialTheme.typography.titleSmall)
                 if (items.isEmpty()) {
                     Text("Aún no hay ítems agregados")
@@ -556,78 +647,22 @@ private fun OtDetailPanel(
                         onRemove = { if (!soloLectura) items.remove(item) }
                     )
                 }
-                if (!soloLectura) {
-                    Divider()
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Agregar ítem", style = MaterialTheme.typography.titleSmall)
-                        Text("Tipo de ítem del presupuesto", style = MaterialTheme.typography.bodySmall)
-                        AssistChip(
-                            onClick = {
-                                nuevoItem = nuevoItem.copy(tipo = if (nuevoItem.tipo == ItemTipo.MO) ItemTipo.REP else ItemTipo.MO)
-                            },
-                            label = { Text(if (nuevoItem.tipo == ItemTipo.MO) "Mano de obra" else "Repuestos") },
-                            colors = AssistChipDefaults.assistChipColors()
-                        )
-                        OutlinedTextField(
-                            value = nuevoItem.titulo,
-                            onValueChange = { nuevoItem = nuevoItem.copy(titulo = it) },
-                            label = { Text("Título del ítem") },
-                            enabled = !soloLectura,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        OutlinedTextField(
-                            value = nuevoItem.descripcion,
-                            onValueChange = { nuevoItem = nuevoItem.copy(descripcion = it) },
-                            label = { Text("Descripción") },
-                            enabled = !soloLectura,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                            OutlinedTextField(
-                                value = nuevoItem.cantidad,
-                                onValueChange = { nuevoItem = nuevoItem.copy(cantidad = it.filter(Char::isDigit)) },
-                                label = { Text("Cantidad (días)") },
-                                modifier = Modifier.weight(1f),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                enabled = !soloLectura
-                            )
-                            OutlinedTextField(
-                                value = nuevoItem.precio,
-                                onValueChange = { nuevoItem = nuevoItem.copy(precio = it.filter(Char::isDigit)) },
-                                label = { Text("Precio/día") },
-                                modifier = Modifier.weight(1f),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                enabled = !soloLectura
-                            )
-                        }
-                        Button(
-                            onClick = {
-                                val cantidad = nuevoItem.cantidad.toIntOrNull()
-                                val precio = nuevoItem.precio.toIntOrNull()
-                                if (nuevoItem.titulo.isNotBlank() && cantidad != null && precio != null) {
-                                    items += nuevoItem.copy(expandido = true)
-                                    nuevoItem = PresupuestoItemFormState()
-                                }
-                            },
-                            enabled = !soloLectura
-                        ) {
-                            Text("Agregar ítem")
-                        }
-                    }
-                }
-                var subtotal = 0
-                var subtotalRep = 0
-                var subtotalMo = 0
-                items.forEach { item ->
-                    val cantidad = item.cantidad.toIntOrNull() ?: 0
-                    val precio = item.precio.toIntOrNull() ?: 0
-                    val totalItem = cantidad * precio
-                    subtotal += totalItem
-                    if (item.tipo == ItemTipo.REP) subtotalRep += totalItem else subtotalMo += totalItem
-                }
+                Divider()
                 val ivaPorcentaje = ivaTexto.toIntOrNull() ?: 0
-                val iva = ((subtotal * ivaPorcentaje) / 100)
-                val total = subtotal + iva
+                val divisorIva = (100 + ivaPorcentaje).takeIf { it > 0 } ?: 100
+                var subtotalMoSinIva = 0
+                var subtotalRepSinIva = 0
+                var totalConIva = 0
+                items.forEach { item ->
+                    val cantidadItem = item.cantidad.toIntOrNull() ?: 0
+                    val precioItem = item.precio.toIntOrNull() ?: 0
+                    val totalItem = cantidadItem * precioItem
+                    totalConIva += totalItem
+                    val itemSinIva = (totalItem * 100) / divisorIva
+                    if (item.tipo == ItemTipo.REP) subtotalRepSinIva += itemSinIva else subtotalMoSinIva += itemSinIva
+                }
+                val subtotalSinIva = subtotalMoSinIva + subtotalRepSinIva
+                val iva = totalConIva - subtotalSinIva
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(
                         checked = presupuestoAprobado,
@@ -648,11 +683,11 @@ private fun OtDetailPanel(
                     enabled = !soloLectura,
                     modifier = Modifier.width(120.dp)
                 )
-                Text("Subtotal MO: ${formatCurrency(subtotalMo)}")
-                Text("Subtotal Repuestos: ${formatCurrency(subtotalRep)}")
-                Text("Subtotal: ${formatCurrency(subtotal)}")
-                Text("IVA: ${formatCurrency(iva)}")
-                Text("Total: ${formatCurrency(total)}", style = MaterialTheme.typography.bodyLarge)
+                Text("Subtotal MO (sin IVA): ${formatCurrency(subtotalMoSinIva)}")
+                Text("Subtotal Repuestos (sin IVA): ${formatCurrency(subtotalRepSinIva)}")
+                Text("Subtotal (sin IVA): ${formatCurrency(subtotalSinIva)}")
+                Text("IVA (${ivaPorcentaje}%): ${formatCurrency(iva)}")
+                Text("Total (con IVA): ${formatCurrency(totalConIva)}", style = MaterialTheme.typography.bodyLarge)
                 presupuestoError?.let { error ->
                     Text(error, color = MaterialTheme.colorScheme.error)
                 }
@@ -772,7 +807,7 @@ private fun PresupuestoItemEditor(item: PresupuestoItemFormState, soloLectura: B
                     OutlinedTextField(
                         value = item.precio,
                         onValueChange = { item.precio = it.filter(Char::isDigit) },
-                        label = { Text("Precio/día") },
+                        label = { Text("Precio/día (con IVA)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         enabled = !soloLectura,
                         modifier = Modifier.weight(1f)
@@ -780,7 +815,7 @@ private fun PresupuestoItemEditor(item: PresupuestoItemFormState, soloLectura: B
                 }
                 val cantidad = item.cantidad.toIntOrNull() ?: 0
                 val precio = item.precio.toIntOrNull() ?: 0
-                Text("Subtotal: ${formatCurrency(cantidad * precio)}")
+                Text("Subtotal (con IVA): ${formatCurrency(cantidad * precio)}")
             }
         }
     }
