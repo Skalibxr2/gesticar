@@ -92,6 +92,7 @@ import com.hans.gesticar.util.formatRutInput
 import com.hans.gesticar.util.isRutValid
 import com.hans.gesticar.util.normalizeRut
 import com.hans.gesticar.util.sanitizeRutInput
+import com.hans.gesticar.viewmodel.MainViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
