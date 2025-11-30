@@ -849,7 +849,12 @@ private fun ClienteSection(
 ) {
     val mensajeEsError = mensajeCliente?.contains("error", ignoreCase = true) == true
     val textoAccion = if (clienteEncontrado) "Guardar cambios" else "Crear cliente"
-    val puedeGuardar = camposHabilitados && rutValido && nombre.isNotBlank() && !guardandoCliente
+    val camposContactoCompletos = correo.isNotBlank() && telefono.isNotBlank()
+    val puedeGuardar = camposHabilitados &&
+        rutValido &&
+        nombre.isNotBlank() &&
+        (clienteEncontrado || camposContactoCompletos) &&
+        !guardandoCliente
 
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
