@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -78,11 +79,12 @@ fun SearchOtScreen(vm: MainViewModel) {
     var rutTexto by rememberSaveable { mutableStateOf("") }
     var estadoExpanded by remember { mutableStateOf(false) }
     var estadoSeleccionado by remember { mutableStateOf<OtState?>(null) }
-    var filtrosVisibles by rememberSaveable { mutableStateOf(true) }
+    var filtrosExpandido by rememberSaveable { mutableStateOf(true) }
+    var filtroError by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Al seleccionar una OT mostramos solo el detalle para aprovechar la pantalla completa.
     LaunchedEffect(ui.detalleSeleccionado?.ot?.id) {
-        filtrosVisibles = ui.detalleSeleccionado == null
+        filtrosExpandido = ui.detalleSeleccionado == null
     }
 
     Column(
@@ -98,84 +100,122 @@ fun SearchOtScreen(vm: MainViewModel) {
             else -> Text("Inicia sesión para realizar búsquedas.")
         }
 
-        if (filtrosVisibles) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = nroTexto,
-                    onValueChange = { nroTexto = it.filter(Char::isDigit) },
-                    label = { Text("N° OT") },
-                    modifier = Modifier.weight(1f)
-                )
-                Button(onClick = {
-                    val numero = nroTexto.toIntOrNull()
-                    if (numero != null) {
-                        vm.buscarPorNumero(numero)
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Filtros de búsqueda", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Cada campo añade una capa al resultado",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                }) { Text("Buscar N°") }
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = patente,
-                    onValueChange = { patente = it.uppercase() },
-                    label = { Text("Patente") },
-                    modifier = Modifier.weight(1f)
-                )
-                Button(onClick = { if (patente.isNotBlank()) vm.buscarPorPatente(patente) }) {
-                    Text("Buscar Patente")
+                    AssistChip(
+                        onClick = { filtrosExpandido = !filtrosExpandido },
+                        label = { Text(if (filtrosExpandido) "Contraer" else "Expandir") }
+                    )
                 }
-            }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = rutTexto,
-                    onValueChange = { rutTexto = formatRutInput(it) },
-                    label = { Text("RUT Cliente") },
-                    modifier = Modifier.weight(1f)
-                )
-                Button(onClick = {
-                    if (rutTexto.isNotBlank()) {
-                        vm.buscarPorRut(normalizeRut(rutTexto))
-                    }
-                }) { Text("Buscar RUT") }
-            }
-
-            // Se despliega correctamente la lista de estados para filtrar por estado de la OT.
-            DropdownTextField(
-                value = estadoSeleccionado?.toReadableName().orEmpty(),
-                label = "Estado OT",
-                expanded = estadoExpanded,
-                onExpandedChange = { estadoExpanded = it },
-                onDismissRequest = { estadoExpanded = false },
-                placeholder = { Text("Buscar por estado") },
-                modifier = Modifier.fillMaxWidth()
-            ) { closeMenu ->
-                val estados = OtState.values()
-                estados.forEach { estado ->
-                    DropdownMenuItem(
-                        text = { Text(estado.toReadableName()) },
-                        onClick = {
-                            estadoSeleccionado = estado
-                            closeMenu()
-                            vm.buscarPorEstado(estado)
+                if (filtrosExpandido) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = nroTexto,
+                                onValueChange = { nroTexto = it.filter(Char::isDigit) },
+                                label = { Text("N° OT") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            OutlinedTextField(
+                                value = patente,
+                                onValueChange = { patente = it.uppercase() },
+                                label = { Text("Patente") },
+                                modifier = Modifier.weight(1f)
+                            )
                         }
-                    )
-                }
-                if (estados.isEmpty()) {
-                    DropdownMenuItem(
-                        text = { Text("Sin estados disponibles") },
-                        onClick = {},
-                        enabled = false
-                    )
-                }
-            }
 
-            TextButton(onClick = { filtrosVisibles = false }) {
-                Text("Ocultar filtros")
-            }
-        } else {
-            TextButton(onClick = { filtrosVisibles = true }) {
-                Text("Mostrar filtros de búsqueda")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = rutTexto,
+                                onValueChange = { rutTexto = formatRutInput(it) },
+                                label = { Text("RUT Cliente") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            DropdownTextField(
+                                value = estadoSeleccionado?.toReadableName().orEmpty(),
+                                label = "Estado OT",
+                                expanded = estadoExpanded,
+                                onExpandedChange = { estadoExpanded = it },
+                                onDismissRequest = { estadoExpanded = false },
+                                placeholder = { Text("Buscar por estado") },
+                                modifier = Modifier.weight(1f)
+                            ) { closeMenu ->
+                                val estados = OtState.values()
+                                estados.forEach { estado ->
+                                    DropdownMenuItem(
+                                        text = { Text(estado.toReadableName()) },
+                                        onClick = {
+                                            estadoSeleccionado = estado
+                                            closeMenu()
+                                        }
+                                    )
+                                }
+                                if (estados.isEmpty()) {
+                                    DropdownMenuItem(
+                                        text = { Text("Sin estados disponibles") },
+                                        onClick = {},
+                                        enabled = false
+                                    )
+                                }
+                            }
+                        }
+
+                        filtroError?.let { mensaje ->
+                            Text(mensaje, color = MaterialTheme.colorScheme.error)
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Button(onClick = {
+                                val numero = nroTexto.toIntOrNull()
+                                val patenteFiltro = patente.takeIf { it.isNotBlank() }?.uppercase()
+                                val rutFiltro = rutTexto.takeIf { it.isNotBlank() }?.let { normalizeRut(it) }
+                                val estadoFiltro = estadoSeleccionado
+                                val hayFiltros = listOfNotNull(numero, patenteFiltro, rutFiltro, estadoFiltro).isNotEmpty()
+
+                                if (!hayFiltros) {
+                                    filtroError = "Ingresa al menos un parámetro de búsqueda"
+                                    return@Button
+                                }
+
+                                filtroError = null
+                                vm.buscarPorFiltros(numero, patenteFiltro, rutFiltro, estadoFiltro)
+                            }) {
+                                Text("Buscar")
+                            }
+                            TextButton(onClick = {
+                                nroTexto = ""
+                                patente = ""
+                                rutTexto = ""
+                                estadoSeleccionado = null
+                                filtroError = null
+                            }) {
+                                Text("Limpiar")
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -218,7 +258,7 @@ fun SearchOtScreen(vm: MainViewModel) {
                 onIniciar = { vm.iniciarOt(detalle.ot.id) },
                 onFinalizar = { vm.finalizarOt(detalle.ot.id) },
                 onCerrar = {
-                    filtrosVisibles = true
+                    filtrosExpandido = true
                     vm.limpiarSeleccion()
                 }
             )
