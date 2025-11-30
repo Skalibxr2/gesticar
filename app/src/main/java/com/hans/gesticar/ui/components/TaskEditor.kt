@@ -27,7 +27,8 @@ class EditableTaskState(
     fechaCreacion: String = defaultCreationDate(),
     fechaInicio: String = "",
     fechaTermino: String = "",
-    estado: TareaEstado = TareaEstado.CREADA
+    estado: TareaEstado = TareaEstado.CREADA,
+    expandido: Boolean = false
 ) {
     var descripcion by mutableStateOf(descripcion)
     var detalle by mutableStateOf(detalle)
@@ -36,6 +37,7 @@ class EditableTaskState(
     var fechaTermino by mutableStateOf(fechaTermino)
     var estado by mutableStateOf(estado)
     var estadoMenuExpanded by mutableStateOf(false)
+    var expandido by mutableStateOf(expandido)
 }
 
 fun EditableTaskState.toTareaOt(): TareaOt {
