@@ -12,6 +12,7 @@ import com.hans.gesticar.model.SintomaInput
 import com.hans.gesticar.model.TareaOt
 import com.hans.gesticar.model.Usuario
 import com.hans.gesticar.model.Vehiculo
+import com.hans.gesticar.repository.RemoteRepository
 import com.hans.gesticar.repository.Repository
 import com.hans.gesticar.util.normalizeRut
 import kotlinx.coroutines.Dispatchers
@@ -44,7 +45,10 @@ data class UiState(
     val mecanicosDisponibles: List<Usuario> = emptyList(),
     val vehiculosCliente: List<Vehiculo> = emptyList(),
     val detalleMensajes: DetalleMensajes = DetalleMensajes(),
-    val cargandoDetalle: Boolean = false
+    val cargandoDetalle: Boolean = false,
+    val sincronizandoRemoto: Boolean = false,
+    val mensajeRemoto: String? = null,
+    val ultimaSyncRemota: Long? = null
 )
 
 data class SearchResult(
@@ -72,7 +76,8 @@ data class CreateOtUiState(
 )
 
 class MainViewModel(
-    private val repo: Repository
+    private val repo: Repository,
+    private val remoteRepository: RemoteRepository? = null
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(UiState())
@@ -81,14 +86,44 @@ class MainViewModel(
     private val _createOtUi = MutableStateFlow(CreateOtUiState())
     val createOtUi: StateFlow<CreateOtUiState> = _createOtUi
 
+    private var cachedRemoteOts: List<Ot> = emptyList()
+
     init {
         refreshOts()
     }
 
-    private fun refreshOts() {
+    private fun refreshOts(forceRemote: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
-            val ots = repo.obtenerOts()
-            _ui.update { it.copy(ots = ots) }
+            val localOts = repo.obtenerOts()
+            _ui.update {
+                it.copy(
+                    ots = mergeOts(localOts, cachedRemoteOts),
+                    sincronizandoRemoto = remoteRepository != null
+                )
+            }
+
+            remoteRepository?.let { remote ->
+                val remoteResult = remote.obtenerOts(forceRemote)
+                remoteResult.onSuccess { remoteOts ->
+                    cachedRemoteOts = remoteOts
+                    val refreshedLocal = repo.obtenerOts()
+                    _ui.update { state ->
+                        state.copy(
+                            ots = mergeOts(refreshedLocal, remoteOts),
+                            sincronizandoRemoto = false,
+                            ultimaSyncRemota = System.currentTimeMillis(),
+                            mensajeRemoto = null
+                        )
+                    }
+                }.onFailure { error ->
+                    _ui.update { state ->
+                        state.copy(
+                            sincronizandoRemoto = false,
+                            mensajeRemoto = error.message ?: "No se pudo sincronizar datos remotos"
+                        )
+                    }
+                }
+            } ?: _ui.update { it.copy(sincronizandoRemoto = false) }
         }
     }
 
@@ -96,27 +131,38 @@ class MainViewModel(
         otId: String,
         mensajesDetalle: DetalleMensajes = DetalleMensajes()
     ) {
-        val detalle = repo.obtenerDetalleOt(otId)
-        val mecanicos = repo.obtenerMecanicos()
-            val ots = repo.obtenerOts()
-            val resultadosActualizados = if (detalle != null) {
-                _ui.value.resultadosBusqueda.map { resultado ->
-                    if (resultado.ot.id == detalle.ot.id) {
-                        resultado.copy(
-                            ot = detalle.ot,
-                            clienteNombre = detalle.cliente?.nombre,
-                            patente = detalle.vehiculo?.patente ?: detalle.ot.vehiculoPatente,
-                            estado = detalle.ot.estado
-                        )
-                    } else {
-                        resultado
-                    }
+        val remoteResult = remoteRepository?.obtenerDetalleOt(otId)
+        val detalleRemoto = remoteResult?.getOrNull()
+        val detalle = mergeDetalle(repo.obtenerDetalleOt(otId), detalleRemoto)
+        val mecanicos = if (detalleRemoto?.mecanicosAsignados?.isNotEmpty() == true) {
+            detalleRemoto.mecanicosAsignados
+        } else {
+            repo.obtenerMecanicos()
+        }
+        val ots = mergeOts(repo.obtenerOts(), cachedRemoteOts)
+        val resultadosActualizados = if (detalle != null) {
+            _ui.value.resultadosBusqueda.map { resultado ->
+                if (resultado.ot.id == detalle.ot.id) {
+                    resultado.copy(
+                        ot = detalle.ot,
+                        clienteNombre = detalle.cliente?.nombre,
+                        patente = detalle.vehiculo?.patente ?: detalle.ot.vehiculoPatente,
+                        estado = detalle.ot.estado
+                    )
+                } else {
+                    resultado
                 }
-            } else {
-                _ui.value.resultadosBusqueda
             }
-            val rutCliente = detalle?.cliente?.rut ?: detalle?.vehiculo?.clienteRut
-            val vehiculos = rutCliente?.let { repo.obtenerVehiculosPorRut(it) } ?: emptyList()
+        } else {
+            _ui.value.resultadosBusqueda
+        }
+        val rutCliente = detalle?.cliente?.rut ?: detalle?.vehiculo?.clienteRut
+        val vehiculosLocales = rutCliente?.let { repo.obtenerVehiculosPorRut(it) } ?: emptyList()
+        val vehiculosRemotos = if (vehiculosLocales.isEmpty() && rutCliente != null) {
+            remoteRepository?.obtenerVehiculosPorRut(rutCliente)?.getOrNull() ?: emptyList()
+        } else {
+            emptyList()
+        }
         _ui.update {
             it.copy(
                 detalleSeleccionado = detalle,
@@ -125,8 +171,9 @@ class MainViewModel(
                 mensaje = null,
                 resultadosBusqueda = resultadosActualizados,
                 ots = ots,
-                vehiculosCliente = vehiculos,
-                detalleMensajes = mensajesDetalle
+                vehiculosCliente = if (vehiculosLocales.isNotEmpty()) vehiculosLocales else vehiculosRemotos,
+                detalleMensajes = mensajesDetalle,
+                mensajeRemoto = remoteResult?.exceptionOrNull()?.message ?: it.mensajeRemoto
             )
         }
     }
@@ -156,6 +203,31 @@ class MainViewModel(
         }
     }
 
+    private fun mergeOts(locales: List<Ot>, remotos: List<Ot>): List<Ot> {
+        val merged = locales.toMutableList()
+        val localIds = locales.map { it.id }.toMutableSet()
+        remotos.forEach { remoto ->
+            if (localIds.add(remoto.id)) {
+                merged.add(remoto)
+            }
+        }
+        return merged
+    }
+
+    private fun mergeDetalle(local: OtDetalle?, remoto: OtDetalle?): OtDetalle? {
+        if (local == null) return remoto
+        if (remoto == null) return local
+        return local.copy(
+            ot = remoto.ot.takeIf { it.id == local.ot.id } ?: local.ot,
+            cliente = local.cliente ?: remoto.cliente,
+            vehiculo = local.vehiculo ?: remoto.vehiculo,
+            mecanicosAsignados = if (remoto.mecanicosAsignados.isNotEmpty()) remoto.mecanicosAsignados else local.mecanicosAsignados,
+            presupuesto = if (remoto.presupuesto.items.isNotEmpty()) remoto.presupuesto else local.presupuesto,
+            tareas = if (remoto.tareas.isNotEmpty()) remoto.tareas else local.tareas,
+            sintomas = if (remoto.sintomas.isNotEmpty()) remoto.sintomas else local.sintomas
+        )
+    }
+
     fun prepararNuevaOt() {
         viewModelScope.launch(Dispatchers.IO) {
             val numero = repo.obtenerSiguienteNumeroOt()
@@ -183,8 +255,15 @@ class MainViewModel(
 
     fun buscarClientePorRut(rut: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            val cliente = repo.buscarClientePorRut(rut)
-            val vehiculos = if (cliente != null) repo.obtenerVehiculosPorRut(rut) else emptyList()
+            val clienteLocal = repo.buscarClientePorRut(rut)
+            val cliente = clienteLocal ?: remoteRepository?.obtenerCliente(rut)?.getOrNull()
+            val vehiculosLocales = if (cliente != null) repo.obtenerVehiculosPorRut(rut) else emptyList()
+            val vehiculosRemotos = if (cliente != null && vehiculosLocales.isEmpty()) {
+                remoteRepository?.obtenerVehiculosPorRut(rut)?.getOrNull() ?: emptyList()
+            } else {
+                emptyList()
+            }
+            val vehiculos = if (vehiculosLocales.isNotEmpty()) vehiculosLocales else vehiculosRemotos
             _createOtUi.update {
                 it.copy(
                     cliente = cliente,
@@ -262,7 +341,18 @@ class MainViewModel(
                     mensajeVehiculo = null
                 )
             }
-            val encontrado = repo.buscarVehiculoPorPatente(patente)
+            val encontradoLocal = repo.buscarVehiculoPorPatente(patente)
+            val encontradoRemoto = if (encontradoLocal == null) {
+                remoteRepository?.obtenerVehiculoPorPatente(patente)?.getOrNull()
+            } else {
+                null
+            }
+            val encontradoExterno = if (encontradoLocal == null && encontradoRemoto == null) {
+                remoteRepository?.obtenerVehiculoExterno(patente)?.getOrNull()
+            } else {
+                null
+            }
+            val encontrado = encontradoLocal ?: encontradoRemoto ?: encontradoExterno
             _createOtUi.update {
                 it.copy(
                     buscandoVehiculo = false,
@@ -413,8 +503,19 @@ class MainViewModel(
     // --- Login ---
     fun login(email: String, password: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            val user = repo.findUserByEmail(email)
-            val ok = user != null && (user.password.isBlank() || user.password == password)
+            var user = repo.findUserByEmail(email)
+            var ok = user != null && (user.password.isBlank() || user.password == password)
+            var mensajeRemoto: String? = null
+
+            remoteRepository?.let { remote ->
+                val remoteLogin = remote.login(email, password)
+                remoteLogin.onSuccess { usuarioRemoto ->
+                    user = usuarioRemoto
+                    ok = true
+                }.onFailure { error ->
+                    mensajeRemoto = error.message
+                }
+            }
 
             _ui.update {
                 it.copy(
@@ -422,13 +523,18 @@ class MainViewModel(
                     usuarioActual = if (ok) user else null,
                     displayName = user?.nombre,
                     resultadosBusqueda = emptyList(),
-                    mensaje = if (ok) null else "Credenciales inválidas",
+                    mensaje = if (ok) null else mensajeRemoto ?: "Credenciales inválidas",
                     detalleMensajes = DetalleMensajes(),
                     vehiculosCliente = emptyList(),
                     detalleSeleccionado = null,
                     mecanicosDisponibles = emptyList(),
-                    cargandoDetalle = false
+                    cargandoDetalle = false,
+                    mensajeRemoto = mensajeRemoto,
+                    sincronizandoRemoto = ok && remoteRepository != null
                 )
+            }
+            if (ok) {
+                refreshOts(forceRemote = true)
             }
         }
     }
@@ -444,9 +550,13 @@ class MainViewModel(
                 cargandoDetalle = false,
                 vehiculosCliente = emptyList(),
                 detalleMensajes = DetalleMensajes(),
-                mensaje = null
+                mensaje = null,
+                mensajeRemoto = null,
+                sincronizandoRemoto = false,
+                ots = mergeOts(repo.obtenerOts(), emptyList())
             )
         }
+        remoteRepository?.limpiarSesion()
     }
 
     // --- Búsquedas ---
@@ -468,9 +578,11 @@ class MainViewModel(
 
         viewModelScope.launch(Dispatchers.IO) {
             val ot = repo.buscarOtPorNumero(numero)
-            val resultados = listOfNotNull(ot).filtrarPara(usuario)
+            val remoto = cachedRemoteOts.firstOrNull { it.numero == numero }
+            val candidatos = mergeOts(listOfNotNull(ot), listOfNotNull(remoto))
+            val resultados = candidatos.filtrarPara(usuario)
             val mensaje = when {
-                ot == null -> "Sin resultados"
+                candidatos.isEmpty() -> "Sin resultados"
                 resultados.isEmpty() -> "Esta OT no está asignada a ti"
                 else -> null
             }
@@ -504,7 +616,9 @@ class MainViewModel(
         }
 
         viewModelScope.launch(Dispatchers.IO) {
-            val lista = repo.buscarOtPorPatente(patente).filtrarPara(usuario)
+            val listaLocal = repo.buscarOtPorPatente(patente)
+            val remotas = cachedRemoteOts.filter { it.vehiculoPatente.equals(patente, ignoreCase = true) }
+            val lista = mergeOts(listaLocal, remotas).filtrarPara(usuario)
             val mensaje = if (lista.isEmpty()) "Sin resultados" else null
             _ui.update {
                 it.copy(
@@ -568,7 +682,8 @@ class MainViewModel(
         }
 
         viewModelScope.launch(Dispatchers.IO) {
-            val lista = repo.buscarOtPorEstado(estado).filtrarPara(usuario)
+            val listaLocal = repo.buscarOtPorEstado(estado)
+            val lista = mergeOts(listaLocal, cachedRemoteOts.filter { it.estado == estado }).filtrarPara(usuario)
             val mensaje = if (lista.isEmpty()) "Sin resultados" else null
             _ui.update {
                 it.copy(
@@ -605,7 +720,7 @@ class MainViewModel(
             val idsPorRut = rutNormalizado?.let { rutInput ->
                 repo.buscarOtPorRut(rutInput).map { it.id }.toSet()
             }
-            val resultados = repo.obtenerOts()
+            val resultados = mergeOts(repo.obtenerOts(), cachedRemoteOts)
                 .filter { numero == null || it.numero == numero }
                 .filter { patenteNormalizada == null || it.vehiculoPatente.equals(patenteNormalizada, ignoreCase = true) }
                 .filter { idsPorRut == null || it.id in idsPorRut }
@@ -627,11 +742,23 @@ class MainViewModel(
     }
 
     private suspend fun construirResultado(ot: Ot): SearchResult {
-        val vehiculo = repo.buscarVehiculoPorPatente(ot.vehiculoPatente)
-        val cliente = vehiculo?.let { v -> repo.buscarClientePorRut(v.clienteRut) }
+        val vehiculoLocal = repo.buscarVehiculoPorPatente(ot.vehiculoPatente)
+        val vehiculoRemoto = if (vehiculoLocal == null) {
+            remoteRepository?.obtenerVehiculoPorPatente(ot.vehiculoPatente)?.getOrNull()
+                ?: remoteRepository?.obtenerVehiculoExterno(ot.vehiculoPatente)?.getOrNull()
+        } else {
+            null
+        }
+        val vehiculo = vehiculoLocal ?: vehiculoRemoto
+        val clienteLocal = vehiculo?.let { v -> repo.buscarClientePorRut(v.clienteRut) }
+        val clienteRemoto = if (clienteLocal == null && vehiculo?.clienteRut != null) {
+            remoteRepository?.obtenerCliente(vehiculo.clienteRut)?.getOrNull()
+        } else {
+            null
+        }
         return SearchResult(
             ot = ot,
-            clienteNombre = cliente?.nombre,
+            clienteNombre = clienteLocal?.nombre ?: clienteRemoto?.nombre,
             patente = vehiculo?.patente ?: ot.vehiculoPatente,
             estado = ot.estado
         )

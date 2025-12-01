@@ -17,6 +17,9 @@ android {
         versionCode = 1
         versionName = "1.0"
 
+        buildConfigField("String", "API_BASE_URL", "\"https://api.gesticar.local/\"")
+        buildConfigField("String", "EXTERNAL_API_BASE_URL", "\"https://external-api.gesticar.cl/\"")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -38,6 +41,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -75,6 +79,13 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
     implementation("androidx.navigation:navigation-compose:2.8.3")
+
+    implementation(platform(libs.okhttp.bom))
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.logging)
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.moshi)
+    implementation(libs.moshi)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
