@@ -20,11 +20,11 @@ import retrofit2.converter.moshi.MoshiConverterFactory
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 
-private class AuthTokenStore {
+internal class AuthTokenStore {
     val token = AtomicReference<String?>(null)
 }
 
-class RemoteRepository(
+internal class RemoteRepository( // remove internal constructor, add to class
     private val api: GesticarApiService,
     private val externalApi: ExternalApiService,
     private val tokenStore: AuthTokenStore = AuthTokenStore()
@@ -92,7 +92,7 @@ class RemoteRepository(
     }
 
     companion object {
-        fun create(): RemoteRepository {
+        internal fun create(): RemoteRepository { // made internal
             val tokenStore = AuthTokenStore()
             val authInterceptor = Interceptor { chain ->
                 val requestBuilder = chain.request().newBuilder()
