@@ -503,6 +503,24 @@ class MainViewModel(
     // --- Login ---
     fun login(email: String, password: String) {
         viewModelScope.launch(Dispatchers.IO) {
+            if (email.isBlank() || password.isBlank()) {
+                _ui.update {
+                    it.copy(
+                        estaAutenticado = false,
+                        usuarioActual = null,
+                        mensaje = "Ingresa tu correo y contraseña para continuar.",
+                        detalleMensajes = DetalleMensajes(),
+                        vehiculosCliente = emptyList(),
+                        detalleSeleccionado = null,
+                        mecanicosDisponibles = emptyList(),
+                        cargandoDetalle = false,
+                        mensajeRemoto = null,
+                        sincronizandoRemoto = false
+                    )
+                }
+                return@launch
+            }
+
             var user = repo.findUserByEmail(email)
             var ok = user != null && (user.password.isBlank() || user.password == password)
             var mensajeRemoto: String? = null
