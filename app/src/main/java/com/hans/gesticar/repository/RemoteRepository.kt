@@ -20,11 +20,11 @@ import retrofit2.converter.moshi.MoshiConverterFactory
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 
-internal class AuthTokenStore {
+class AuthTokenStore {
     val token = AtomicReference<String?>(null)
 }
 
-internal class RemoteRepository(
+class RemoteRepository(
     private val api: GesticarApiService,
     private val externalApi: ExternalApiService,
     private val tokenStore: AuthTokenStore = AuthTokenStore()
