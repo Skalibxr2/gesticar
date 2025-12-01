@@ -20,6 +20,7 @@ import com.hans.gesticar.ui.screens.LoginScreen
 import com.hans.gesticar.ui.screens.CreateOtScreen
 import com.hans.gesticar.ui.screens.HomeMenuScreen
 import com.hans.gesticar.ui.screens.SearchOtScreen
+import com.hans.gesticar.repository.RemoteRepository
 import com.hans.gesticar.repository.SqliteRepository
 import com.hans.gesticar.viewmodel.MainViewModel
 import com.hans.gesticar.viewmodel.MainViewModelFactory
@@ -33,7 +34,12 @@ class MainActivity : ComponentActivity() {
                     val nav = rememberNavController()
                     val context = LocalContext.current
                     val appContext = context.applicationContext
-                    val factory = remember(appContext) { MainViewModelFactory(SqliteRepository(appContext)) }
+                    val factory = remember(appContext) {
+                        MainViewModelFactory(
+                            SqliteRepository(appContext),
+                            RemoteRepository.create()
+                        )
+                    }
                     val vm: MainViewModel = viewModel(factory = factory)
                     val uiState by vm.ui.collectAsState()
 
