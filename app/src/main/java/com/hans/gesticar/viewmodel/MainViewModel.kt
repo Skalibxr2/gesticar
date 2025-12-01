@@ -540,23 +540,26 @@ class MainViewModel(
     }
 
     fun logout() {
-        _ui.update {
-            it.copy(
-                estaAutenticado = false,
-                usuarioActual = null,
-                resultadosBusqueda = emptyList(),
-                detalleSeleccionado = null,
-                mecanicosDisponibles = emptyList(),
-                cargandoDetalle = false,
-                vehiculosCliente = emptyList(),
-                detalleMensajes = DetalleMensajes(),
-                mensaje = null,
-                mensajeRemoto = null,
-                sincronizandoRemoto = false,
-                ots = mergeOts(repo.obtenerOts(), emptyList())
-            )
+        viewModelScope.launch(Dispatchers.IO) {
+            val ots = repo.obtenerOts()
+            _ui.update {
+                it.copy(
+                    estaAutenticado = false,
+                    usuarioActual = null,
+                    resultadosBusqueda = emptyList(),
+                    detalleSeleccionado = null,
+                    mecanicosDisponibles = emptyList(),
+                    cargandoDetalle = false,
+                    vehiculosCliente = emptyList(),
+                    detalleMensajes = DetalleMensajes(),
+                    mensaje = null,
+                    mensajeRemoto = null,
+                    sincronizandoRemoto = false,
+                    ots = mergeOts(ots, emptyList())
+                )
+            }
+            remoteRepository?.limpiarSesion()
         }
-        remoteRepository?.limpiarSesion()
     }
 
     // --- Búsquedas ---
