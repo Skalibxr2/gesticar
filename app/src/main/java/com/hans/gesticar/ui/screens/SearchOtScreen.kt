@@ -311,6 +311,7 @@ fun SearchOtScreen(vm: MainViewModel) {
                             items(ui.resultadosBusqueda) { resultado ->
                                 val seleccionado = ui.detalleSeleccionado?.ot?.id == resultado.ot.id
                                 OtCard(resultado = resultado, seleccionado = seleccionado) {
+                                    resultadosExpandido = false
                                     vm.seleccionarOt(resultado.ot.id)
                                 }
                             }
@@ -442,7 +443,6 @@ private fun OtDetailPanel(
     var patente by remember { mutableStateOf(detalle.vehiculo?.patente ?: detalle.ot.vehiculoPatente) }
     val mecanicosSeleccionados = remember { mutableStateListOf<String>() }
     var selectorMecanicosExpandido by remember { mutableStateOf(false) }
-    var selectorVehiculoExpandido by remember { mutableStateOf(false) }
     var presupuestoAprobado by remember { mutableStateOf(detalle.presupuesto.aprobado) }
     var ivaTexto by remember { mutableStateOf(detalle.presupuesto.ivaPorc.toString()) }
     val items = remember { mutableStateListOf<PresupuestoItemFormState>() }
@@ -459,7 +459,6 @@ private fun OtDetailPanel(
         mecanicosSeleccionados.clear()
         mecanicosSeleccionados.addAll(detalle.ot.mecanicosAsignados)
         selectorMecanicosExpandido = false
-        selectorVehiculoExpandido = false
         presupuestoAprobado = detalle.presupuesto.aprobado
         ivaTexto = detalle.presupuesto.ivaPorc.toString()
         items.clear()
@@ -488,10 +487,6 @@ private fun OtDetailPanel(
     }
 
     val enEjecucion = detalle.ot.estado == OtState.EN_EJECUCION
-    val vehiculoEditable = when (detalle.ot.estado) {
-        OtState.EN_EJECUCION, OtState.FINALIZADA, OtState.CANCELADA -> false
-        else -> true
-    }
     val permiteCambiarEstadoTareas = enEjecucion
     // Una OT finalizada queda solo para consulta; bloqueamos todas las acciones.
     val soloLectura = detalle.ot.estado == OtState.FINALIZADA || detalle.ot.estado == OtState.CANCELADA
@@ -547,54 +542,6 @@ private fun OtDetailPanel(
             } ?: Text("Vehículo no registrado", color = MaterialTheme.colorScheme.error)
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Datos generales", style = MaterialTheme.typography.titleSmall)
-                DropdownTextField(
-                    value = vehiculoActual?.let { "${it.patente} • ${it.marca} ${it.modelo}" }
-                        ?: patente,
-                    label = "Vehículo asociado",
-                    expanded = selectorVehiculoExpandido,
-                    onExpandedChange = { selectorVehiculoExpandido = it },
-                    onDismissRequest = { selectorVehiculoExpandido = false },
-                    enabled = vehiculoEditable && !soloLectura && vehiculosCliente.isNotEmpty(),
-                    placeholder = { Text("Selecciona un vehículo registrado") },
-                    modifier = Modifier.fillMaxWidth()
-                ) { closeMenu ->
-                    if (vehiculosCliente.isEmpty()) {
-                        DropdownMenuItem(
-                            text = { Text("Sin vehículos disponibles") },
-                            onClick = {},
-                            enabled = false
-                        )
-                    } else {
-                        vehiculosCliente.forEach { vehiculo ->
-                            DropdownMenuItem(
-                                text = { Text("${vehiculo.patente} • ${vehiculo.marca} ${vehiculo.modelo}") },
-                                onClick = {
-                                    patente = vehiculo.patente
-                                    closeMenu()
-                                }
-                            )
-                        }
-                    }
-                }
-                if (!vehiculoEditable) {
-                    Text(
-                        "No es posible cambiar el vehículo una vez iniciada la OT",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                } else if (vehiculosCliente.isEmpty()) {
-                    Text(
-                        "El cliente no tiene otros vehículos registrados",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                if (mostrarErroresDatos && patenteVacia) {
-                    Text(
-                        "Selecciona un vehículo para continuar",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
                 OutlinedTextField(
                     value = notas,
                     onValueChange = { notas = it },
@@ -673,12 +620,6 @@ private fun OtDetailPanel(
                         Text("No hay mecánicos disponibles", color = MaterialTheme.colorScheme.error)
                     }
                 }
-                Button(
-                    onClick = guardarDatosValidados,
-                    enabled = !soloLectura
-                ) {
-                    Text("Guardar OT")
-                }
                 mensajes.datos?.let { mensaje ->
                     Text(
                         mensaje.text,
@@ -695,6 +636,12 @@ private fun OtDetailPanel(
                     expandido = tareasExpandido,
                     mostrarFormulario = mostrarFormularioTareas,
                     onToggleExpandido = {
+                        if (tareasExpandido) {
+                            val tareasValidas = tareas
+                                .filter { it.descripcion.isNotBlank() }
+                                .map { it.toTareaOt() }
+                            onGuardarTareas(tareasValidas)
+                        }
                         tareasExpandido = !tareasExpandido
                         if (!tareasExpandido) {
                             mostrarFormularioTareas = false
@@ -705,17 +652,6 @@ private fun OtDetailPanel(
                     onRemoveTask = { tarea -> tareas.remove(tarea) },
                     permiteEliminar = permiteEliminarTareas
                 )
-                Button(
-                    onClick = {
-                        val tareasValidas = tareas
-                            .filter { it.descripcion.isNotBlank() }
-                            .map { it.toTareaOt() }
-                        onGuardarTareas(tareasValidas)
-                    },
-                    enabled = !soloLectura
-                ) {
-                    Text("Guardar tareas")
-                }
                 mensajes.tareas?.let { mensaje ->
                     Text(
                         mensaje.text,

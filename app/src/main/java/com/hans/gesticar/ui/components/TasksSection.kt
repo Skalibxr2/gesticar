@@ -152,8 +152,10 @@ fun TasksSection(
                 }
 
                 if (expandido) {
-                    OutlinedButton(onClick = onToggleFormulario, enabled = !soloLectura) {
-                        Text(if (mostrarFormulario) "Ocultar formulario" else "Agregar nueva tarea")
+                    if (!mostrarFormulario) {
+                        OutlinedButton(onClick = onToggleFormulario, enabled = !soloLectura) {
+                            Text("Agregar nueva tarea")
+                        }
                     }
 
                     if (mostrarFormulario) {
