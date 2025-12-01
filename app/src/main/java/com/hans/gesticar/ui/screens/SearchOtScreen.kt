@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
@@ -50,9 +51,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.hans.gesticar.model.ItemTipo
 import com.hans.gesticar.model.Ot
 import com.hans.gesticar.model.OtDetalle
@@ -423,6 +427,16 @@ private class EditableTaskState(
     var completada by mutableStateOf(completada)
 }
 
+private class SintomaDetalleState(
+    val id: String = UUID.randomUUID().toString(),
+    val descripcion: String,
+    val fotos: List<String>,
+    val registradoEn: Long?,
+    expandido: Boolean = false
+) {
+    var expandido by mutableStateOf(expandido)
+}
+
 @Composable
 private fun OtDetailPanel(
     detalle: OtDetalle,
@@ -449,9 +463,19 @@ private fun OtDetailPanel(
     val tareas = remember { mutableStateListOf<EditableTaskState>() }
     var tareasExpandido by remember { mutableStateOf(false) }
     var mostrarFormularioTareas by remember { mutableStateOf(false) }
+    var presupuestoExpandido by remember { mutableStateOf(false) }
+    var mostrarFormularioPresupuesto by remember { mutableStateOf(false) }
     var presupuestoError by remember { mutableStateOf<String?>(null) }
     var nuevoItem by remember { mutableStateOf(PresupuestoItemFormState()) }
     var mostrarErroresNuevoItem by remember { mutableStateOf(false) }
+    var sintomasExpandido by remember { mutableStateOf(false) }
+    val sintomas = remember { mutableStateListOf<SintomaDetalleState>() }
+
+    LaunchedEffect(mostrarFormularioPresupuesto) {
+        if (!mostrarFormularioPresupuesto) {
+            mostrarErroresNuevoItem = false
+        }
+    }
 
     LaunchedEffect(detalle.ot.id, vehiculosCliente) {
         notas = detalle.ot.notas.orEmpty()
@@ -461,6 +485,8 @@ private fun OtDetailPanel(
         selectorMecanicosExpandido = false
         presupuestoAprobado = detalle.presupuesto.aprobado
         ivaTexto = detalle.presupuesto.ivaPorc.toString()
+        presupuestoExpandido = false
+        mostrarFormularioPresupuesto = false
         items.clear()
         detalle.presupuesto.items.forEach { item ->
             items += PresupuestoItemFormState(
@@ -484,6 +510,17 @@ private fun OtDetailPanel(
         }
         tareasExpandido = false
         mostrarFormularioTareas = false
+        sintomas.clear()
+        detalle.sintomas.forEach { sintoma ->
+            sintomas += SintomaDetalleState(
+                id = sintoma.id,
+                descripcion = sintoma.descripcion,
+                fotos = sintoma.fotos,
+                registradoEn = sintoma.registradoEn,
+                expandido = false
+            )
+        }
+        sintomasExpandido = false
     }
 
     val enEjecucion = detalle.ot.estado == OtState.EN_EJECUCION
@@ -627,6 +664,17 @@ private fun OtDetailPanel(
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
+                SintomasSection(
+                    sintomas = sintomas,
+                    expandido = sintomasExpandido,
+                    onToggleExpandido = { sintomasExpandido = !sintomasExpandido },
+                    onExpandSintoma = { seleccionado ->
+                        val debeExpandir = sintomas.getOrNull(seleccionado)?.expandido != true
+                        sintomas.forEachIndexed { index, sintoma ->
+                            sintoma.expandido = debeExpandir && index == seleccionado
+                        }
+                    }
+                )
                 TasksSection(
                     tasks = tareas,
                     soloLectura = soloLectura,
@@ -663,187 +711,223 @@ private fun OtDetailPanel(
 
             Divider()
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Presupuesto", style = MaterialTheme.typography.titleSmall)
-                Text(
-                    "Los precios/día incluyen IVA",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (!soloLectura) {
-                    Text("Agregar ítem", style = MaterialTheme.typography.titleSmall)
-                    Text("Tipo de ítem del presupuesto", style = MaterialTheme.typography.bodySmall)
-                    AssistChip(
-                        onClick = {
-                            nuevoItem = nuevoItem.copy(tipo = if (nuevoItem.tipo == ItemTipo.MO) ItemTipo.REP else ItemTipo.MO)
-                        },
-                        label = { Text(if (nuevoItem.tipo == ItemTipo.MO) "Mano de obra" else "Repuestos") },
-                        colors = AssistChipDefaults.assistChipColors()
-                    )
-                    val tituloInvalido = nuevoItem.titulo.isBlank()
-                    OutlinedTextField(
-                        value = nuevoItem.titulo,
-                        onValueChange = { nuevoItem = nuevoItem.copy(titulo = it) },
-                        label = { Text("Título del ítem") },
-                        enabled = !soloLectura,
-                        isError = mostrarErroresNuevoItem && tituloInvalido,
-                        supportingText = {
-                            if (mostrarErroresNuevoItem && tituloInvalido) {
-                                Text("Campo obligatorio", color = MaterialTheme.colorScheme.error)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = nuevoItem.descripcion,
-                        onValueChange = { nuevoItem = nuevoItem.copy(descripcion = it) },
-                        label = { Text("Descripción") },
-                        enabled = !soloLectura,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    val cantidad = nuevoItem.cantidad.toIntOrNull()
-                    val precio = nuevoItem.precio.toIntOrNull()
-                    val cantidadInvalida = cantidad == null
-                    val precioInvalido = precio == null
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = nuevoItem.cantidad,
-                            onValueChange = { nuevoItem = nuevoItem.copy(cantidad = it.filter(Char::isDigit)) },
-                            label = { Text("Cantidad (días)") },
-                            modifier = Modifier.weight(1f),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            enabled = !soloLectura,
-                            isError = mostrarErroresNuevoItem && cantidadInvalida,
-                            supportingText = {
-                                if (mostrarErroresNuevoItem && cantidadInvalida) {
-                                    Text("Campo obligatorio", color = MaterialTheme.colorScheme.error)
-                                }
-                            }
-                        )
-                        OutlinedTextField(
-                            value = nuevoItem.precio,
-                            onValueChange = { nuevoItem = nuevoItem.copy(precio = it.filter(Char::isDigit)) },
-                            label = { Text("Precio/día (con IVA)") },
-                            modifier = Modifier.weight(1f),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            enabled = !soloLectura,
-                            isError = mostrarErroresNuevoItem && precioInvalido,
-                            supportingText = {
-                                if (mostrarErroresNuevoItem && precioInvalido) {
-                                    Text("Campo obligatorio", color = MaterialTheme.colorScheme.error)
-                                }
-                            }
-                        )
-                    }
-                    Button(
-                        onClick = {
-                            val tituloValido = nuevoItem.titulo.isNotBlank()
-                            val cantidadValida = cantidad != null
-                            val precioValido = precio != null
-                            if (tituloValido && cantidadValida && precioValido) {
-                                mostrarErroresNuevoItem = false
-                                items += nuevoItem.copy(expandido = false)
-                                nuevoItem = PresupuestoItemFormState()
-                            } else {
-                                mostrarErroresNuevoItem = true
-                            }
-                        },
-                        enabled = !soloLectura
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { presupuestoExpandido = !presupuestoExpandido }
                     ) {
-                        Text("Agregar ítem")
-                    }
-                    Divider()
-                }
-                Text("Ítems del presupuesto", style = MaterialTheme.typography.titleSmall)
-                if (items.isEmpty()) {
-                    Text("Aún no hay ítems agregados")
-                }
-                items.forEach { item ->
-                    PresupuestoItemEditor(
-                        item = item,
-                        soloLectura = soloLectura,
-                        onRemove = { if (!soloLectura) items.remove(item) }
-                    )
-                }
-                Divider()
-                val ivaPorcentaje = ivaTexto.toIntOrNull() ?: 0
-                val divisorIva = (100 + ivaPorcentaje).takeIf { it > 0 } ?: 100
-                var subtotalMoSinIva = 0
-                var subtotalRepSinIva = 0
-                var totalConIva = 0
-                items.forEach { item ->
-                    val cantidadItem = item.cantidad.toIntOrNull() ?: 0
-                    val precioItem = item.precio.toIntOrNull() ?: 0
-                    val totalItem = cantidadItem * precioItem
-                    totalConIva += totalItem
-                    val itemSinIva = (totalItem * 100) / divisorIva
-                    if (item.tipo == ItemTipo.REP) subtotalRepSinIva += itemSinIva else subtotalMoSinIva += itemSinIva
-                }
-                val subtotalSinIva = subtotalMoSinIva + subtotalRepSinIva
-                val iva = totalConIva - subtotalSinIva
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(
-                        checked = presupuestoAprobado,
-                        onCheckedChange = { presupuestoAprobado = it },
-                        enabled = !soloLectura,
-                        colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (presupuestoAprobado) "Presupuesto aprobado" else "Presupuesto pendiente")
-                }
-                OutlinedTextField(
-                    value = ivaTexto,
-                    onValueChange = { valor ->
-                        ivaTexto = valor.filter { it.isDigit() }
-                    },
-                    label = { Text("IVA %") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    enabled = !soloLectura,
-                    modifier = Modifier.width(120.dp)
-                )
-                Text("Subtotal MO (sin IVA): ${formatCurrency(subtotalMoSinIva)}")
-                Text("Subtotal Repuestos (sin IVA): ${formatCurrency(subtotalRepSinIva)}")
-                Text("Subtotal (sin IVA): ${formatCurrency(subtotalSinIva)}")
-                Text("IVA (${ivaPorcentaje}%): ${formatCurrency(iva)}")
-                Text("Total (con IVA): ${formatCurrency(totalConIva)}", style = MaterialTheme.typography.bodyLarge)
-                presupuestoError?.let { error ->
-                    Text(error, color = MaterialTheme.colorScheme.error)
-                }
-                Button(
-                    onClick = {
-                        val ivaInt = ivaTexto.toIntOrNull()
-                        val itemsValidos = items.mapNotNull { item ->
-                            val cantidad = item.cantidad.toIntOrNull()
-                            val precio = item.precio.toIntOrNull()
-                            if (cantidad == null || precio == null || item.titulo.isBlank()) {
-                                null
-                            } else {
-                                PresupuestoItem(
-                                    id = item.id,
-                                    tipo = item.tipo,
-                                    descripcion = buildItemDescripcion(item.titulo, item.descripcion),
-                                    cantidad = cantidad,
-                                    precioUnit = precio
+                        Column(Modifier.weight(1f)) {
+                            Text("Presupuesto", style = MaterialTheme.typography.titleMedium)
+                            if (!presupuestoExpandido) {
+                                Text(
+                                    "Toca para ver y editar los ítems",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
-                        if (ivaInt == null || itemsValidos.size != items.size) {
-                            presupuestoError = "Revisa los datos numéricos del presupuesto"
-                        } else {
-                            presupuestoError = null
-                            onGuardarPresupuesto(itemsValidos, presupuestoAprobado, ivaInt)
+                        Icon(
+                            imageVector = if (presupuestoExpandido) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (presupuestoExpandido) "Contraer presupuesto" else "Expandir presupuesto"
+                        )
+                    }
+
+                    if (presupuestoExpandido) {
+                        Text(
+                            "Los precios/día incluyen IVA",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        if (!soloLectura) {
+                            OutlinedButton(onClick = { mostrarFormularioPresupuesto = !mostrarFormularioPresupuesto }) {
+                                Text(if (mostrarFormularioPresupuesto) "Ocultar formulario" else "Agregar nuevo ítem")
+                            }
                         }
-                    },
-                    enabled = !soloLectura
-                ) {
-                    Text("Guardar presupuesto")
-                }
-                mensajes.presupuesto?.let { mensaje ->
-                    Text(
-                        mensaje.text,
-                        color = if (mensaje.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                        style = MaterialTheme.typography.bodySmall
-                    )
+
+                        if (mostrarFormularioPresupuesto && !soloLectura) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Agregar ítem", style = MaterialTheme.typography.titleSmall)
+                                Text("Tipo de ítem del presupuesto", style = MaterialTheme.typography.bodySmall)
+                                AssistChip(
+                                    onClick = {
+                                        nuevoItem = nuevoItem.copy(tipo = if (nuevoItem.tipo == ItemTipo.MO) ItemTipo.REP else ItemTipo.MO)
+                                    },
+                                    label = { Text(if (nuevoItem.tipo == ItemTipo.MO) "Mano de obra" else "Repuestos") },
+                                    colors = AssistChipDefaults.assistChipColors()
+                                )
+                                val tituloInvalido = nuevoItem.titulo.isBlank()
+                                OutlinedTextField(
+                                    value = nuevoItem.titulo,
+                                    onValueChange = { nuevoItem = nuevoItem.copy(titulo = it) },
+                                    label = { Text("Título del ítem") },
+                                    enabled = !soloLectura,
+                                    isError = mostrarErroresNuevoItem && tituloInvalido,
+                                    supportingText = {
+                                        if (mostrarErroresNuevoItem && tituloInvalido) {
+                                            Text("Campo obligatorio", color = MaterialTheme.colorScheme.error)
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                OutlinedTextField(
+                                    value = nuevoItem.descripcion,
+                                    onValueChange = { nuevoItem = nuevoItem.copy(descripcion = it) },
+                                    label = { Text("Descripción") },
+                                    enabled = !soloLectura,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                val cantidad = nuevoItem.cantidad.toIntOrNull()
+                                val precio = nuevoItem.precio.toIntOrNull()
+                                val cantidadInvalida = cantidad == null
+                                val precioInvalido = precio == null
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                                    OutlinedTextField(
+                                        value = nuevoItem.cantidad,
+                                        onValueChange = { nuevoItem = nuevoItem.copy(cantidad = it.filter(Char::isDigit)) },
+                                        label = { Text("Cantidad (días)") },
+                                        modifier = Modifier.weight(1f),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        enabled = !soloLectura,
+                                        isError = mostrarErroresNuevoItem && cantidadInvalida,
+                                        supportingText = {
+                                            if (mostrarErroresNuevoItem && cantidadInvalida) {
+                                                Text("Campo obligatorio", color = MaterialTheme.colorScheme.error)
+                                            }
+                                        }
+                                    )
+                                    OutlinedTextField(
+                                        value = nuevoItem.precio,
+                                        onValueChange = { nuevoItem = nuevoItem.copy(precio = it.filter(Char::isDigit)) },
+                                        label = { Text("Precio/día (con IVA)") },
+                                        modifier = Modifier.weight(1f),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        enabled = !soloLectura,
+                                        isError = mostrarErroresNuevoItem && precioInvalido,
+                                        supportingText = {
+                                            if (mostrarErroresNuevoItem && precioInvalido) {
+                                                Text("Campo obligatorio", color = MaterialTheme.colorScheme.error)
+                                            }
+                                        }
+                                    )
+                                }
+                                Button(
+                                    onClick = {
+                                        if (cantidad == null || precio == null || nuevoItem.titulo.isBlank()) {
+                                            mostrarErroresNuevoItem = true
+                                        } else {
+                                            mostrarErroresNuevoItem = false
+                                            items.forEach { it.expandido = false }
+                                            items += nuevoItem.copy(expandido = true)
+                                            nuevoItem = PresupuestoItemFormState()
+                                        }
+                                    },
+                                    enabled = !soloLectura
+                                ) {
+                                    Text("Agregar ítem")
+                                }
+                            }
+                        }
+
+                        Divider()
+
+                        Text("Ítems del presupuesto", style = MaterialTheme.typography.titleSmall)
+                        if (items.isEmpty()) {
+                            Text("Aún no hay ítems agregados")
+                        }
+                        items.forEach { item ->
+                            PresupuestoItemEditor(
+                                item = item,
+                                soloLectura = soloLectura,
+                                onRemove = { if (!soloLectura) items.remove(item) }
+                            )
+                        }
+
+                        Divider()
+
+                        val ivaPorcentaje = ivaTexto.toIntOrNull() ?: 0
+                        val divisorIva = (100 + ivaPorcentaje).takeIf { it > 0 } ?: 100
+                        var subtotalMoSinIva = 0
+                        var subtotalRepSinIva = 0
+                        var totalConIva = 0
+                        items.forEach { item ->
+                            val cantidadItem = item.cantidad.toIntOrNull() ?: 0
+                            val precioItem = item.precio.toIntOrNull() ?: 0
+                            val totalItem = cantidadItem * precioItem
+                            totalConIva += totalItem
+                            val itemSinIva = (totalItem * 100) / divisorIva
+                            if (item.tipo == ItemTipo.REP) subtotalRepSinIva += itemSinIva else subtotalMoSinIva += itemSinIva
+                        }
+                        val subtotalSinIva = subtotalMoSinIva + subtotalRepSinIva
+                        val iva = totalConIva - subtotalSinIva
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Switch(
+                                checked = presupuestoAprobado,
+                                onCheckedChange = { presupuestoAprobado = it },
+                                enabled = !soloLectura,
+                                colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (presupuestoAprobado) "Presupuesto aprobado" else "Presupuesto pendiente")
+                        }
+                        OutlinedTextField(
+                            value = ivaTexto,
+                            onValueChange = { valor ->
+                                ivaTexto = valor.filter { it.isDigit() }
+                            },
+                            label = { Text("IVA %") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            enabled = !soloLectura,
+                            modifier = Modifier.width(120.dp)
+                        )
+                        Text("Subtotal MO (sin IVA): ${formatCurrency(subtotalMoSinIva)}")
+                        Text("Subtotal Repuestos (sin IVA): ${formatCurrency(subtotalRepSinIva)}")
+                        Text("Subtotal (sin IVA): ${formatCurrency(subtotalSinIva)}")
+                        Text("IVA (${ivaPorcentaje}%): ${formatCurrency(iva)}")
+                        Text("Total (con IVA): ${formatCurrency(totalConIva)}", style = MaterialTheme.typography.bodyLarge)
+                        presupuestoError?.let { error ->
+                            Text(error, color = MaterialTheme.colorScheme.error)
+                        }
+                        Button(
+                            onClick = {
+                                val ivaInt = ivaTexto.toIntOrNull()
+                                val itemsValidos = items.mapNotNull { item ->
+                                    val cantidad = item.cantidad.toIntOrNull()
+                                    val precio = item.precio.toIntOrNull()
+                                    if (cantidad == null || precio == null || item.titulo.isBlank()) {
+                                        null
+                                    } else {
+                                        PresupuestoItem(
+                                            id = item.id,
+                                            tipo = item.tipo,
+                                            descripcion = buildItemDescripcion(item.titulo, item.descripcion),
+                                            cantidad = cantidad,
+                                            precioUnit = precio
+                                        )
+                                    }
+                                }
+                                if (ivaInt == null || itemsValidos.size != items.size) {
+                                    presupuestoError = "Revisa los datos numéricos del presupuesto"
+                                } else {
+                                    presupuestoError = null
+                                    onGuardarPresupuesto(itemsValidos, presupuestoAprobado, ivaInt)
+                                }
+                            },
+                            enabled = !soloLectura
+                        ) {
+                            Text("Guardar presupuesto")
+                        }
+                        mensajes.presupuesto?.let { mensaje ->
+                            Text(
+                                mensaje.text,
+                                color = if (mensaje.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
                 }
             }
 
@@ -861,9 +945,9 @@ private fun OtDetailPanel(
                     Button(onClick = guardarDatosValidados, enabled = !soloLectura) {
                         Text("Guardar borrador")
                     }
-                }
-                Button(onClick = onIniciar, enabled = puedeIniciar && !soloLectura) {
-                    Text("Iniciar OT")
+                    Button(onClick = onIniciar, enabled = puedeIniciar && !soloLectura) {
+                        Text("Iniciar OT")
+                    }
                 }
                 if (enEjecucion) {
                     OutlinedButton(onClick = { mostrarConfirmacionCancelar = true }, enabled = !soloLectura) {
@@ -941,6 +1025,116 @@ private fun OtDetailPanel(
                         }
                     }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SintomasSection(
+    sintomas: List<SintomaDetalleState>,
+    expandido: Boolean,
+    onToggleExpandido: () -> Unit,
+    onExpandSintoma: (Int) -> Unit,
+) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggleExpandido() }
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Síntomas del vehículo", style = MaterialTheme.typography.titleMedium)
+                    if (!expandido) {
+                        Text(
+                            "Toca para ver los detalles registrados",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Icon(
+                    imageVector = if (expandido) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expandido) "Contraer síntomas" else "Expandir síntomas"
+                )
+            }
+
+            if (expandido) {
+                if (sintomas.isEmpty()) {
+                    Text("Sin síntomas registrados", style = MaterialTheme.typography.bodySmall)
+                }
+                sintomas.forEachIndexed { index, sintoma ->
+                    SintomaDetalleCard(
+                        indice = index + 1,
+                        sintoma = sintoma,
+                        onToggleExpandido = { onExpandSintoma(index) }
+                    )
+                    if (index < sintomas.lastIndex) {
+                        Divider()
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SintomaDetalleCard(
+    indice: Int,
+    sintoma: SintomaDetalleState,
+    onToggleExpandido: () -> Unit,
+) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggleExpandido() }
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Síntoma #$indice", style = MaterialTheme.typography.labelLarge)
+                        Icon(
+                            imageVector = if (sintoma.expandido) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (sintoma.expandido) "Contraer síntoma" else "Expandir síntoma"
+                        )
+                    }
+                    Text(
+                        text = sintoma.descripcion.ifBlank { "Sin descripción" },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+
+            if (sintoma.expandido) {
+                val fechaRegistro = sintoma.registradoEn?.let { timestamp ->
+                    val formatter = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+                    formatter.format(Date(timestamp))
+                }
+                fechaRegistro?.let { fecha ->
+                    Text("Registrado el $fecha", style = MaterialTheme.typography.bodySmall)
+                }
+                Text(
+                    text = sintoma.descripcion.ifBlank { "Sin descripción" },
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                if (sintoma.fotos.isNotEmpty()) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(sintoma.fotos) { foto ->
+                            AsyncImage(
+                                model = foto,
+                                contentDescription = "Foto de síntoma",
+                                modifier = Modifier.size(96.dp),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+                    }
+                }
             }
         }
     }
