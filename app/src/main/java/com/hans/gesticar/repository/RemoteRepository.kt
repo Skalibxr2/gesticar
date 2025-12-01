@@ -24,7 +24,7 @@ internal class AuthTokenStore {
     val token = AtomicReference<String?>(null)
 }
 
-class RemoteRepository(
+internal class RemoteRepository(
     private val api: GesticarApiService,
     private val externalApi: ExternalApiService,
     private val tokenStore: AuthTokenStore = AuthTokenStore()
