@@ -28,7 +28,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -86,7 +85,7 @@ private fun DatePickerField(
                 Icon(Icons.Default.CalendarToday, contentDescription = "Seleccionar fecha")
             }
         },
-        colors = TextFieldDefaults.outlinedTextFieldColors()
+        colors = TextFieldDefaults.colors()
     )
 }
 
@@ -188,7 +187,7 @@ fun TasksSection(
                                     placeholder = { Text("dd/MM/aaaa") },
                                     modifier = Modifier.weight(1f),
                                     readOnly = true,
-                                    colors = TextFieldDefaults.outlinedTextFieldColors()
+                                    colors = TextFieldDefaults.colors()
                                 )
                                 DatePickerField(
                                     label = "Fecha de inicio",
@@ -217,7 +216,7 @@ fun TasksSection(
                                     modifier = Modifier.weight(1f),
                                     enabled = permiteCambiarEstado
                                 ) { closeMenu ->
-                                    TareaEstado.values().forEach { estado ->
+                                    TareaEstado.entries.forEach { estado ->
                                         DropdownMenuItem(
                                             text = { Text(estado.toReadableName()) },
                                             onClick = {
@@ -352,7 +351,7 @@ private fun TaskItemCard(
                     placeholder = { Text("dd/MM/aaaa") },
                     readOnly = true,
                     modifier = Modifier.weight(1f),
-                    colors = TextFieldDefaults.outlinedTextFieldColors()
+                    colors = TextFieldDefaults.colors()
                 )
                 DatePickerField(
                     label = "Fecha de inicio",
@@ -382,7 +381,7 @@ private fun TaskItemCard(
                     modifier = Modifier.weight(1f),
                     enabled = permiteCambiarEstado && !soloLectura
                 ) { closeMenu ->
-                    TareaEstado.values().forEach { estado ->
+                    TareaEstado.entries.forEach { estado ->
                         DropdownMenuItem(
                             text = { Text(estado.toReadableName()) },
                             onClick = {

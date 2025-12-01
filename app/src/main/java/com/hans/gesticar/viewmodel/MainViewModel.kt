@@ -789,7 +789,7 @@ class MainViewModel(
             val ok = repo.eliminarOt(otId)
             val mensaje = if (ok) "Borrador eliminado" else "No se pudo eliminar la OT"
             val refreshed = repo.obtenerOts()
-            val resultadosFiltrados = _ui.value.resultadosBusqueda.filterNot { it.id == otId }
+            val resultadosFiltrados = _ui.value.resultadosBusqueda.filterNot { it.ot.id == otId }
             val limpiarDetalle = _ui.value.detalleSeleccionado?.ot?.id == otId
             _ui.update {
                 it.copy(

@@ -606,7 +606,7 @@ private fun OtDetailPanel(
                             Text("Campo obligatorio", color = MaterialTheme.colorScheme.error)
                         }
                     },
-                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                    colors = TextFieldDefaults.colors(
                         disabledTextColor = MaterialTheme.colorScheme.onSurface
                     ),
                     modifier = Modifier.fillMaxWidth()
