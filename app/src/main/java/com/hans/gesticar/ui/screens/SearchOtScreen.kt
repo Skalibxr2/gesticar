@@ -937,42 +937,50 @@ private fun OtDetailPanel(
             Divider()
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                if (detalle.ot.estado == OtState.BORRADOR) {
-                    OutlinedButton(onClick = { mostrarConfirmacionEliminar = true }, enabled = !soloLectura) {
-                        Icon(Icons.Default.Delete, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Eliminar borrador")
-                    }
-                    Button(onClick = guardarDatosValidados, enabled = !soloLectura) {
-                        Text("Guardar borrador")
-                    }
-                    Button(onClick = onIniciar, enabled = puedeIniciar && !soloLectura) {
-                        Text("Iniciar OT")
-                    }
-                }
-                if (enEjecucion) {
-                    OutlinedButton(onClick = { mostrarConfirmacionCancelar = true }, enabled = !soloLectura) {
-                        Text("Cancelar OT")
-                    }
-                }
-                Button(
-                    onClick = {
-                        mostrarErroresDatos = true
-                        val tareasInvalidas = tareas.any { it.estado !in listOf(TareaEstado.TERMINADA, TareaEstado.CANCELADA) }
-                        if (patenteVacia || sinMecanicos || notasVacias) {
-                            mensajeValidacionEstado = "Faltan datos obligatorios para finalizar"
-                            return@Button
+                when (detalle.ot.estado) {
+                    OtState.BORRADOR -> {
+                        OutlinedButton(onClick = { mostrarConfirmacionEliminar = true }, enabled = !soloLectura) {
+                            Icon(Icons.Default.Delete, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Eliminar borrador")
                         }
-                        if (tareasInvalidas) {
-                            mensajeValidacionEstado = "Asegúrate de que todas las tareas estén terminadas o canceladas"
-                            return@Button
+                        Button(onClick = guardarDatosValidados, enabled = !soloLectura) {
+                            Text("Guardar borrador")
                         }
-                        mensajeValidacionEstado = null
-                        onFinalizar()
-                    },
-                    enabled = puedeFinalizar && !soloLectura
-                ) {
-                    Text("Finalizar OT")
+                        Button(onClick = onIniciar, enabled = puedeIniciar && !soloLectura) {
+                            Text("Iniciar OT")
+                        }
+                    }
+
+                    OtState.EN_EJECUCION -> {
+                        Button(onClick = guardarDatosValidados, enabled = !soloLectura) {
+                            Text("Guardar OT")
+                        }
+                        OutlinedButton(onClick = { mostrarConfirmacionCancelar = true }, enabled = !soloLectura) {
+                            Text("Cancelar OT")
+                        }
+                        Button(
+                            onClick = {
+                                mostrarErroresDatos = true
+                                val tareasInvalidas = tareas.any { it.estado !in listOf(TareaEstado.TERMINADA, TareaEstado.CANCELADA) }
+                                if (patenteVacia || sinMecanicos || notasVacias) {
+                                    mensajeValidacionEstado = "Faltan datos obligatorios para finalizar"
+                                    return@Button
+                                }
+                                if (tareasInvalidas) {
+                                    mensajeValidacionEstado = "Asegúrate de que todas las tareas estén terminadas o canceladas"
+                                    return@Button
+                                }
+                                mensajeValidacionEstado = null
+                                onFinalizar()
+                            },
+                            enabled = puedeFinalizar && !soloLectura
+                        ) {
+                            Text("Finalizar OT")
+                        }
+                    }
+
+                    else -> Unit
                 }
             }
             mensajeValidacionEstado?.let { error ->
