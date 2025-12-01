@@ -24,7 +24,7 @@ internal class AuthTokenStore {
     val token = AtomicReference<String?>(null)
 }
 
-internal class RemoteRepository( // remove internal constructor, add to class
+class RemoteRepository(
     private val api: GesticarApiService,
     private val externalApi: ExternalApiService,
     private val tokenStore: AuthTokenStore = AuthTokenStore()
@@ -92,7 +92,7 @@ internal class RemoteRepository( // remove internal constructor, add to class
     }
 
     companion object {
-        internal fun create(): RemoteRepository { // made internal
+        fun create(): RemoteRepository {
             val tokenStore = AuthTokenStore()
             val authInterceptor = Interceptor { chain ->
                 val requestBuilder = chain.request().newBuilder()
